@@ -1,3 +1,3 @@
-## Cockpit Navigator 0.5.12-1
+## Cockpit Navigator 0.5.13-1
 
-* Building latest fixes
+* adding support for proxmox trixie
