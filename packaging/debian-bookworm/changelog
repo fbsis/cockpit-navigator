@@ -1,3 +1,9 @@
+cockpit-navigator (0.5.13-2bookworm) bookworm; urgency=medium
+
+  * adding support for proxmox trixie
+
+ -- Rachit Hans <rhans@45drives.com>  Wed, 08 Jul 2026 07:13:04 -0300
+
 cockpit-navigator (0.5.13-1bookworm) bookworm; urgency=medium
 
   * adding support for proxmox trixie
