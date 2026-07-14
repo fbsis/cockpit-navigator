@@ -35,6 +35,19 @@
             "file",
             "coreutils",
             "inotify-tools"
+        ],
+        "debian_common": [
+            "cockpit-ws",
+            "cockpit-bridge",
+            "cockpit-system",
+            "cockpit-storaged",
+            "cockpit-packagekit",
+            "python3",
+            "rsync",
+            "zip",
+            "file",
+            "coreutils",
+            "inotify-tools"
         ]
     },
     "builds": [
