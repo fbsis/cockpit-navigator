@@ -1,3 +1,10 @@
+cockpit-navigator (0.5.14-1bookworm) bookworm; urgency=medium
+
+  * fix: remove cockpit-system, cockpit-storaged, cockpit-packagekit from debian
+    dependencies to avoid pulling in network-manager
+
+ -- Rachit Hans <rhans@45drives.com>  Tue, 14 Jul 2026 14:45:45 -0300
+
 cockpit-navigator (0.5.13-2bookworm) bookworm; urgency=medium
 
   * adding support for proxmox trixie

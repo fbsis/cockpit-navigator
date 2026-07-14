@@ -33,6 +33,9 @@ rm -rf %{buildroot}
 /usr/share/cockpit/navigator/*
 
 %changelog
+* Tue Jul 14 2026 Rachit Hans <rhans@45drives.com> 0.5.14-1
+- fix: remove cockpit-system, cockpit-storaged, cockpit-packagekit from debian dependencies
+  to avoid pulling in network-manager
 * Wed Jul 08 2026 Rachit Hans <rhans@45drives.com> 0.5.13-2
 - adding support for proxmox trixie
 * Tue Jul 07 2026 Rachit Hans <rhans@45drives.com> 0.5.13-1
