@@ -1,3 +1,22 @@
+cockpit-navigator (0.5.14-1focal) focal; urgency=medium
+
+  * fix: remove cockpit-system, cockpit-storaged, cockpit-packagekit from debian
+    dependencies to avoid pulling in network-manager
+
+ -- Rachit Hans <rhans@45drives.com>  Tue, 14 Jul 2026 14:45:45 -0300
+
+cockpit-navigator (0.5.13-2focal) focal; urgency=medium
+
+  * adding support for proxmox trixie
+
+ -- Rachit Hans <rhans@45drives.com>  Wed, 08 Jul 2026 07:13:04 -0300
+
+cockpit-navigator (0.5.13-1focal) focal; urgency=medium
+
+  * adding support for proxmox trixie
+
+ -- Rachit Hans <rhans@45drives.com>  Tue, 07 Jul 2026 15:10:54 -0300
+
 cockpit-navigator (0.5.12-1focal) focal; urgency=medium
 
   * Building latest fixes

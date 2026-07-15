@@ -1,3 +1,3 @@
-## Cockpit Navigator 0.5.12-1
+## Cockpit Navigator 0.5.14-1
 
-* Building latest fixes
+* fix: remove cockpit-system, cockpit-storaged, cockpit-packagekit from debian dependencies to avoid pulling in network-manager
