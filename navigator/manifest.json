@@ -1,5 +1,6 @@
 {
     "version": 0,
+    "content-security-policy": "style-src 'self' 'unsafe-inline'",
 
     "menu": {
         "navigator": {
