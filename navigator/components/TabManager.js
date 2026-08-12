@@ -206,13 +206,12 @@ export class TabManager {
 	}
 
 	async close_tab(tab_id) {
-		if (this.tabs.length === 1)
-			return;
-
 		const closing_index = this.tabs.findIndex(tab => tab.id === tab_id);
 		if (closing_index === -1)
 			return;
 		const closing_tab = this.tabs[closing_index];
+		if (this.tabs.length === 1 && closing_tab.type === "directory")
+			return;
 		if (closing_tab.id === this.active_tab_id && closing_tab.type === "file")
 			this.update_active_buffer();
 		if (closing_tab.type === "file" && closing_tab.modified) {
@@ -226,6 +225,15 @@ export class TabManager {
 		}
 
 		const was_active = this.active_tab_id === tab_id;
+		if (this.tabs.length === 1 && closing_tab.type === "file") {
+			const path_stack = this.nav_window_ref.build_path_stack(closing_tab.parent_path || "/");
+			this.tabs.push({
+				id: this.next_id++,
+				type: "directory",
+				path_stack,
+				path_stack_index: path_stack.length - 1,
+			});
+		}
 		this.tabs.splice(closing_index, 1);
 		if (closing_tab.type === "file")
 			this.code_editor.destroy_session(closing_tab.path);
@@ -275,11 +283,15 @@ export class TabManager {
 			close_button.title = `Close ${path}`;
 			close_button.setAttribute("aria-label", `Close ${path}`);
 			close_button.innerHTML = '<i class="fas fa-times"></i>';
-			close_button.disabled = this.tabs.length === 1;
-			close_button.keep_disabled = this.tabs.length === 1;
-			if (this.tabs.length === 1)
+			const is_last_directory = this.tabs.length === 1 && tab.type === "directory";
+			close_button.disabled = is_last_directory;
+			close_button.keep_disabled = is_last_directory;
+			if (is_last_directory)
 				close_button.classList.add("nav-tab-close-hidden");
-			close_button.addEventListener("click", () => this.close_tab(tab.id));
+			close_button.addEventListener("click", event => {
+				event.stopPropagation();
+				this.close_tab(tab.id);
+			});
 
 			tab_element.append(tab_button, close_button);
 			this.tab_list.appendChild(tab_element);
