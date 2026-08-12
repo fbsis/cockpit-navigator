@@ -205,6 +205,82 @@ body {
 	align-items: baseline;
 }
 
+.nav-tabs {
+	display: flex;
+	align-items: flex-end;
+	min-width: 0;
+	margin-top: 0.75em;
+	border-bottom: 1px solid var(--border);
+}
+
+.nav-tab-list {
+	display: flex;
+	min-width: 0;
+	overflow-x: auto;
+	scrollbar-width: thin;
+}
+
+.nav-tab {
+	display: flex;
+	align-items: stretch;
+	min-width: 130px;
+	max-width: 240px;
+	color: var(--font);
+	background-color: var(--navigation);
+	border: 1px solid var(--border);
+	border-bottom: 0;
+	border-radius: var(--nav-border-radius) var(--nav-border-radius) 0 0;
+	margin-right: 0.25em;
+	opacity: 0.75;
+}
+
+.nav-tab-active {
+	background-color: var(--container);
+	opacity: 1;
+}
+
+.nav-tab-path,
+.nav-tab-close {
+	border: 0;
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+}
+
+.nav-tab-path {
+	display: flex;
+	align-items: center;
+	gap: 0.5em;
+	flex: 1;
+	min-width: 0;
+	padding: 0.5em 0.7em;
+}
+
+.nav-tab-path span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.nav-tab-close {
+	padding: 0.5em 0.6em;
+}
+
+.nav-tab-path:hover,
+.nav-tab-close:hover,
+.nav-new-tab:hover {
+	background-color: var(--selected);
+}
+
+.nav-tab-close-hidden {
+	display: none;
+}
+
+.nav-new-tab {
+	flex: 0 0 auto;
+	margin-bottom: 0.2em;
+}
+
 input[type="text"] {
 	background-color: var(--container);
 	color: inherit;

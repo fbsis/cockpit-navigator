@@ -28,10 +28,10 @@ import { format_bytes, format_permissions } from "../functions.js";
 export class NavWindow {
 	constructor() {
 		this.item_display = "grid";
-		this.path_stack = (localStorage.getItem('navigator-path') ?? '/').split('/');
-		this.path_stack = this.path_stack.map((_, index) => new NavDir([...this.path_stack.slice(0, index + 1)].filter(part => part != ''), this));
+		this.path_stack = this.build_path_stack(localStorage.getItem('navigator-path') ?? '/');
 
 		this.path_stack_index = this.path_stack.length - 1;
+		this.navigation_change_handler = null;
 		this.selected_entries = new Set([this.pwd()]);
 		this.entries = [];
 		this.window = document.getElementById("nav-contents-view");
@@ -78,6 +78,18 @@ export class NavWindow {
 			"/usr/share",
 			"/var"
 		];
+	}
+
+	build_path_stack(path) {
+		const path_parts = path.split('/');
+		return path_parts.map((_, index) => new NavDir(
+			[...path_parts.slice(0, index + 1)].filter(part => part != ''),
+			this
+		));
+	}
+
+	notify_navigation_change() {
+		this.navigation_change_handler?.();
 	}
 
 	/**
@@ -191,16 +203,19 @@ export class NavWindow {
 		this.path_stack.length = this.path_stack_index + 1;
 		this.path_stack.push(new_dir);
 		this.path_stack_index = this.path_stack.length - 1;
+		this.notify_navigation_change();
 		this.refresh();
 	}
 
 	back() {
 		this.path_stack_index = Math.max(this.path_stack_index - 1, 0);
+		this.notify_navigation_change();
 		this.refresh();
 	}
 	
 	forward() {
 		this.path_stack_index = Math.min(this.path_stack_index + 1, this.path_stack.length - 1);
+		this.notify_navigation_change();
 		this.refresh();
 	}
 	
@@ -895,7 +910,7 @@ export class NavWindow {
 
 	enable_buttons() {
 		for (let button of document.getElementsByTagName("button")) {
-			button.disabled = false;
+			button.disabled = Boolean(button.keep_disabled);
 		}
 		document.getElementById("pwd").disabled = false;
 		this.set_nav_button_state();
