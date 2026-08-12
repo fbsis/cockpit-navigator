@@ -221,7 +221,8 @@ export class ModalPrompt {
 			label.style.flexGrow = "1";
 			let req = document.createElement(request.type === "select" ? "select" : "input");
 			req.id = key;
-			req.type = request.type;
+			if (req instanceof HTMLInputElement)
+				req.type = request.type;
 			req.style.flexBasis = "0";
 			if (request.hasOwnProperty("default")) {
 				req.value = request.default;
