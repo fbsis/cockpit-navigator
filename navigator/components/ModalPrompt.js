@@ -176,6 +176,64 @@ export class ModalPrompt {
 		});
 	}
 
+	choose_row(header, columns, rows, actionLabel = "Choose") {
+		this.set_header(header);
+		this.body.innerHTML = "";
+		this.footer.innerHTML = "";
+		const table = document.createElement("table");
+		table.className = "nav-choice-table";
+		const head = document.createElement("thead");
+		const headRow = document.createElement("tr");
+		for (const column of columns) {
+			const cell = document.createElement("th");
+			cell.innerText = column;
+			headRow.appendChild(cell);
+		}
+		head.appendChild(headRow);
+		const body = document.createElement("tbody");
+		const group = `nav-choice-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+		let selected = rows[0]?.value ?? null;
+		rows.forEach((row, index) => {
+			const tableRow = document.createElement("tr");
+			const labelCell = document.createElement("td");
+			labelCell.innerText = row.label;
+			const optionCell = document.createElement("td");
+			const option = document.createElement("input");
+			option.type = "radio";
+			option.name = group;
+			option.value = row.value;
+			option.checked = index === 0;
+			option.setAttribute("aria-label", `Select ${row.label}`);
+			option.onchange = () => { selected = row.value; };
+			tableRow.onclick = () => {
+				option.checked = true;
+				selected = row.value;
+			};
+			optionCell.appendChild(option);
+			tableRow.append(labelCell, optionCell);
+			body.appendChild(tableRow);
+		});
+		table.append(head, body);
+		this.body.appendChild(table);
+		const action = document.createElement("button");
+		action.type = "button";
+		action.innerText = actionLabel;
+		action.classList.add("pf-c-button", "pf-m-primary");
+		this.footer.append(this.cancel, action);
+		this.show();
+		action.focus();
+		return new Promise(resolve => {
+			action.onclick = () => {
+				this.hide();
+				resolve(selected);
+			};
+			this.cancel.onclick = () => {
+				this.hide();
+				resolve(null);
+			};
+		});
+	}
+
 	/**
 	 * 
 	 * @param {string} header 

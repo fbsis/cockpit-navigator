@@ -58,18 +58,17 @@ export class ZfsSnapshotManager {
 			await this.nav_window_ref.modal_prompt.alert("No snapshot history", "No ZFS snapshot contains this file or folder.");
 			return;
 		}
-		const response = await this.nav_window_ref.modal_prompt.prompt("ZFS snapshot history", {
-			snapshot: {
-				label: `${path} (${result.dataset})`,
-				type: "select",
-				options: [...result.snapshots].reverse().map(snapshot => ({
-					value: snapshot.name,
-					label: `${snapshot.createdText} — ${snapshot.shortName}`,
-				})),
-			},
-		});
-		if (!response) return;
-		const selected = result.snapshots.find(snapshot => snapshot.name === response.snapshot);
+		const selectedName = await this.nav_window_ref.modal_prompt.choose_row(
+			"ZFS snapshot history",
+			["Date and time", "Restore"],
+			[...result.snapshots].reverse().map(snapshot => ({
+				value: snapshot.name,
+				label: new Date(snapshot.created * 1000).toLocaleString(),
+			})),
+			"Restore",
+		);
+		if (!selectedName) return;
+		const selected = result.snapshots.find(snapshot => snapshot.name === selectedName);
 		if (!selected) return;
 		const confirmed = await this.nav_window_ref.modal_prompt.confirm(
 			`Restore ${entry.filename} from ${selected.shortName}?`,
