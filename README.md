@@ -12,6 +12,25 @@ With no command line use needed, you can:
 * **Upload files by dragging and dropping**,
 * **Download files and directories**.
 
+## Features added by Felipe Braga
+
+The following improvements were created and maintained by [Felipe Braga](https://github.com/fbsis) in this fork:
+
+* **Directory bookmarks** saved per Linux user in `~/.config/cockpit-navigator/config.json`.
+* **Directory navigation tabs**, including opening a folder in a new tab from the context menu.
+* **Editable file tabs** that keep each directory tab in its previous navigation state.
+* **Persistent open tabs**: directory paths, file tabs, tab order, and the active tab are restored after reloading Cockpit.
+* **Ace code editor** with a permanently dark theme, syntax highlighting, line numbers, independent file sessions, undo/redo, cursor and scroll preservation.
+* **Editor diff modes** with disabled, inline, and side-by-side views against the last loaded or saved version.
+* **Live autocompletion** using language keywords and words from the current document.
+* **Persistent editor preferences** for diff mode, autocomplete, font size, wrapping, line numbers, tab size, and spaces or real tabs.
+* **Focused and fullscreen editing layouts**, plus a persistent global switch for showing or hiding the properties sidebar in folders and files.
+* **Improved tab visibility and lifecycle**, with a clearer active tab and safe closing of file sessions.
+* **Queued rsync transfers** with progress, transfer speed, ETA, cancellation, conflict handling, and safer move operations.
+* **Copy and move between open directory tabs** using the clipboard button or context menu.
+* **Image preview gallery** powered by PhotoSwipe, with zoom, keyboard and gesture navigation, and previous/next navigation based on the currently visible file list.
+* **Video preview** using the browser's native video controls, with offline local-file loading and download fallback.
+
 | Browsing Filesystem |
 |---------------------|
 | ![User Interface](doc/ui_root.png) |
