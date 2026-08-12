@@ -6,16 +6,16 @@
 */
 
 import { simple_spawn } from "../functions.js";
+import { CodeEditor } from "./CodeEditor.js";
 
 export class TabManager {
-	constructor(nav_window_ref) {
+	constructor(nav_window_ref, config_store) {
 		this.nav_window_ref = nav_window_ref;
 		this.nav_window_ref.tab_manager = this;
 		this.tab_list = document.getElementById("nav-tab-list");
 		this.new_tab_button = document.getElementById("nav-new-tab-btn");
 		this.editor = document.getElementById("nav-edit-contents-view");
 		this.editor_header = document.getElementById("nav-edit-contents-header");
-		this.textarea = document.getElementById("nav-edit-contents-textarea");
 		this.file_view = document.getElementById("nav-contents-view-holder");
 		this.tabs = [];
 		this.next_id = 1;
@@ -24,7 +24,11 @@ export class TabManager {
 		this.new_tab_button.addEventListener("click", () => this.create_directory_tab());
 		document.getElementById("nav-continue-edit-contents-btn").onclick = () => this.save_active_file();
 		document.getElementById("nav-cancel-edit-contents-btn").onclick = () => this.close_tab(this.active_tab_id);
-		this.textarea.addEventListener("input", () => this.update_active_buffer());
+		this.code_editor = new CodeEditor(config_store, {
+			onChange: (path, modified) => this.on_editor_change(path, modified),
+			onError: (title, error) => this.nav_window_ref.modal_prompt.alert(title, error.message || String(error)),
+		});
+		this.ready = this.code_editor.ready;
 		window.addEventListener("keydown", event => {
 			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s" && this.active_tab()?.type === "file") {
 				event.preventDefault();
@@ -69,9 +73,15 @@ export class TabManager {
 		const tab = this.active_tab();
 		if (tab?.type !== "file")
 			return;
-		tab.contents = this.textarea.value;
-		tab.modified = tab.contents !== tab.original_contents;
-		this.render();
+		tab.modified = this.code_editor.is_modified(tab.path);
+	}
+
+	on_editor_change(path, modified) {
+		const tab = this.tabs.find(candidate => candidate.type === "file" && candidate.path === path);
+		if (tab) {
+			tab.modified = modified;
+			this.render();
+		}
 	}
 
 	current_path(tab) {
@@ -98,6 +108,7 @@ export class TabManager {
 	}
 
 	async open_file(path, display_path = path) {
+		await this.ready;
 		const existing_tab = this.tabs.find(tab => tab.type === "file" && tab.path === path);
 		if (existing_tab) {
 			this.activate_tab(existing_tab.id);
@@ -119,10 +130,9 @@ export class TabManager {
 			path,
 			display_path,
 			parent_path,
-			contents,
-			original_contents: contents,
 			modified: false,
 		};
+		this.code_editor.create_session(path, contents, display_path);
 		this.tabs.push(tab);
 		this.activate_tab(tab.id);
 	}
@@ -167,8 +177,7 @@ export class TabManager {
 		this.editor.style.display = "flex";
 		this.set_directory_controls_disabled(true);
 		this.editor_header.textContent = `Editing ${tab.display_path}`;
-		this.textarea.value = tab.contents;
-		this.textarea.focus();
+		this.code_editor.show(tab.path);
 	}
 
 	set_directory_controls_disabled(disabled) {
@@ -183,10 +192,10 @@ export class TabManager {
 		const tab = this.active_tab();
 		if (tab?.type !== "file")
 			return;
-		this.update_active_buffer();
+		const contents = this.code_editor.get_value(tab.path);
 		try {
-			await simple_spawn(["/usr/share/cockpit/navigator/scripts/write-to-file.py3", tab.path], tab.contents);
-			tab.original_contents = tab.contents;
+			await simple_spawn(["/usr/share/cockpit/navigator/scripts/write-to-file.py3", tab.path], contents);
+			this.code_editor.mark_saved(tab.path);
 			tab.modified = false;
 			this.render();
 		} catch (error) {
@@ -216,6 +225,8 @@ export class TabManager {
 
 		const was_active = this.active_tab_id === tab_id;
 		this.tabs.splice(closing_index, 1);
+		if (closing_tab.type === "file")
+			this.code_editor.destroy_session(closing_tab.path);
 		if (was_active) {
 			const next_tab = this.tabs[Math.min(closing_index, this.tabs.length - 1)];
 			this.active_tab_id = next_tab.id;

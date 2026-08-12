@@ -37,4 +37,13 @@ export class NavigatorConfig {
 		process.input(JSON.stringify(this.config, null, 2), true);
 		await process;
 	}
+
+	async section(name, defaults = {}) {
+		const config = await this.load();
+		const current = config[name];
+		if (!current || Array.isArray(current) || typeof current !== "object")
+			config[name] = {};
+		config[name] = { ...defaults, ...config[name] };
+		return config[name];
+	}
 }

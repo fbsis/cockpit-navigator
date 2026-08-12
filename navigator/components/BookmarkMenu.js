@@ -9,10 +9,10 @@ import { NavDir } from "./NavDir.js";
 import { NavigatorConfig } from "./NavigatorConfig.js";
 
 export class BookmarkMenu {
-	constructor(nav_window_ref) {
+	constructor(nav_window_ref, config_store = new NavigatorConfig()) {
 		this.nav_window_ref = nav_window_ref;
 		this.legacy_storage_key = "navigator-bookmarks";
-		this.config_store = new NavigatorConfig();
+		this.config_store = config_store;
 		this.button = document.getElementById("nav-bookmarks-btn");
 		this.menu = document.getElementById("nav-bookmarks-menu");
 

@@ -21,6 +21,7 @@ import { ModalPrompt } from "./components/ModalPrompt.js";
 import { NavWindow } from "./components/NavWindow.js";
 import { BookmarkMenu } from "./components/BookmarkMenu.js";
 import { TabManager } from "./components/TabManager.js";
+import { NavigatorConfig } from "./components/NavigatorConfig.js";
 import { NAVIGATOR_VERSION } from "./version.js";
 
 /**
@@ -98,8 +99,8 @@ function switch_theme(e) {
 }
 
 let nav_window = new NavWindow();
-let bookmark_menu = new BookmarkMenu(nav_window);
-let tab_manager = new TabManager(nav_window);
+let bookmark_menu;
+let tab_manager;
 
 function set_up_buttons() {
 	document.getElementById("nav-back-btn").addEventListener("click", nav_window.back.bind(nav_window));
@@ -136,16 +137,6 @@ function set_up_buttons() {
 			nav_window.search_filter(e);
 		e.stopPropagation();
 	});
-	// fix tab in editor input
-	document.getElementById('nav-edit-contents-textarea').addEventListener('keydown', (e) => {
-		if (e.key == 'Tab') {
-			e.preventDefault();
-			var start = e.target.selectionStart;
-			var end = e.target.selectionEnd;
-			e.target.value = `${e.target.value.substring(0, start)}\t${e.target.value.substring(end)}`;
-			e.target.selectionStart = e.target.selectionEnd = start + 1;
-		}
-	});
 	document.getElementById("nav-info-btn").addEventListener("click", () => {
 		new ModalPrompt().alert(
 			`Cockpit Navigator ${NAVIGATOR_VERSION}`,
@@ -159,6 +150,16 @@ function set_up_buttons() {
 }
 
 async function main() {
+	const config_store = new NavigatorConfig();
+	try {
+		await config_store.load();
+	} catch (error) {
+		config_store.config = {};
+		await nav_window.modal_prompt.alert("Could not load Navigator settings.", error.message || String(error));
+	}
+	bookmark_menu = new BookmarkMenu(nav_window, config_store);
+	tab_manager = new TabManager(nav_window, config_store);
+	await tab_manager.ready;
 	set_last_theme_state();
 	load_hidden_file_state(nav_window);
 	load_item_display_state(nav_window);
