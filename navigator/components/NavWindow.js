@@ -235,7 +235,7 @@ export class NavWindow {
 	}
 
 	open_terminal(path = this.pwd().path_str()) {
-		cockpit.jump(`/system/terminal?folder=${encodeURIComponent(path)}`);
+		this.tab_manager.open_terminal(path);
 	}
 	
 	clear_selected() {

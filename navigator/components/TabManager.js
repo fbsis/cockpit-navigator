@@ -7,6 +7,7 @@
 
 import { simple_spawn } from "../functions.js";
 import { CodeEditor } from "./CodeEditor.js";
+import { TerminalManager } from "./TerminalManager.js";
 
 export class TabManager {
 	constructor(nav_window_ref, config_store) {
@@ -18,6 +19,7 @@ export class TabManager {
 		this.editor = document.getElementById("nav-edit-contents-view");
 		this.editor_header = document.getElementById("nav-edit-contents-header");
 		this.file_view = document.getElementById("nav-contents-view-holder");
+		this.terminal_view = document.getElementById("nav-terminal-view");
 		this.tabs = [];
 		this.next_id = 1;
 		this.active_tab_id = null;
@@ -32,6 +34,7 @@ export class TabManager {
 			onChange: (path, modified) => this.on_editor_change(path, modified),
 			onError: (title, error) => this.nav_window_ref.modal_prompt.alert(title, error.message || String(error)),
 		});
+		this.terminal_manager = new TerminalManager(nav_window_ref);
 		this.ready = this.initialize_workspace();
 		window.addEventListener("keydown", event => {
 			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s" && this.active_tab()?.type === "file") {
@@ -137,11 +140,16 @@ export class TabManager {
 
 	workspace_snapshot() {
 		this.sync_active_directory();
+		const persistent_tabs = this.tabs.filter(tab => tab.type !== "terminal");
+		const active = this.active_tab();
+		const persistent_active = active?.type === "terminal"
+			? persistent_tabs.findIndex(tab => tab.id === this.tabs.find(candidate => candidate.type !== "terminal")?.id)
+			: persistent_tabs.findIndex(tab => tab.id === this.active_tab_id);
 		return {
-			tabs: this.tabs.map(tab => tab.type === "directory"
+			tabs: persistent_tabs.map(tab => tab.type === "directory"
 				? { type: "directory", path: this.current_path(tab) }
 				: { type: "file", path: tab.path, displayPath: tab.display_path }),
-			activeIndex: Math.max(0, this.tabs.findIndex(tab => tab.id === this.active_tab_id)),
+			activeIndex: Math.max(0, persistent_active),
 			updatedAt: Date.now(),
 		};
 	}
@@ -213,7 +221,7 @@ export class TabManager {
 	}
 
 	current_path(tab) {
-		return tab.type === "file"
+		return ["file", "terminal"].includes(tab.type)
 			? tab.path
 			: tab.path_stack[tab.path_stack_index].path_str();
 	}
@@ -277,6 +285,12 @@ export class TabManager {
 		this.activate_tab(tab.id);
 	}
 
+	open_terminal(path) {
+		const tab = { id: this.next_id++, type: "terminal", path: path || "/" };
+		this.tabs.push(tab);
+		this.activate_tab(tab.id);
+	}
+
 	activate_tab(tab_id) {
 		if (tab_id === this.active_tab_id)
 			return;
@@ -291,8 +305,10 @@ export class TabManager {
 		this.render();
 		if (tab.type === "directory") {
 			this.activate_directory_view(tab);
-		} else {
+		} else if (tab.type === "file") {
 			this.show_file(tab);
+		} else {
+			this.show_terminal(tab);
 		}
 		this.persist_workspace();
 	}
@@ -306,6 +322,7 @@ export class TabManager {
 	}
 
 	show_directory(tab) {
+		this.terminal_manager.hide();
 		this.code_editor.deactivate();
 		this.editor.style.display = "none";
 		this.file_view.style.display = "flex";
@@ -315,6 +332,7 @@ export class TabManager {
 	}
 
 	show_file(tab) {
+		this.terminal_manager.hide();
 		this.nav_window_ref.directory_size_manager.cancel();
 		this.file_view.style.display = "none";
 		this.editor.style.display = "flex";
@@ -322,6 +340,16 @@ export class TabManager {
 		this.editor_header.textContent = `Editing ${tab.display_path}`;
 		this.code_editor.activate();
 		this.code_editor.show(tab.path);
+	}
+
+	show_terminal(tab) {
+		this.nav_window_ref.directory_size_manager.cancel();
+		this.code_editor.deactivate();
+		this.file_view.style.display = "none";
+		this.editor.style.display = "none";
+		this.terminal_view.style.display = "flex";
+		this.set_directory_controls_disabled(true);
+		this.terminal_manager.show(tab);
 	}
 
 	set_directory_controls_disabled(disabled) {
@@ -367,8 +395,8 @@ export class TabManager {
 		}
 
 		const was_active = this.active_tab_id === tab_id;
-		if (this.tabs.length === 1 && closing_tab.type === "file") {
-			const path_stack = this.nav_window_ref.build_path_stack(closing_tab.parent_path || "/");
+		if (this.tabs.length === 1 && closing_tab.type !== "directory") {
+			const path_stack = this.nav_window_ref.build_path_stack(closing_tab.parent_path || closing_tab.path || "/");
 			this.tabs.push({
 				id: this.next_id++,
 				type: "directory",
@@ -384,12 +412,16 @@ export class TabManager {
 			this.active_tab_id = next_tab.id;
 			if (next_tab.type === "directory") {
 				this.activate_directory_view(next_tab);
-			} else {
+			} else if (next_tab.type === "file") {
 				this.show_file(next_tab);
+			} else {
+				this.show_terminal(next_tab);
 			}
 		}
 		if (closing_tab.type === "file")
 			this.code_editor.destroy_session(closing_tab.path);
+		if (closing_tab.type === "terminal")
+			this.terminal_manager.destroy(closing_tab.id);
 		this.render();
 		this.persist_workspace();
 	}
@@ -409,7 +441,8 @@ export class TabManager {
 			tab_button.className = "nav-tab-path disable-while-loading";
 			tab_button.setAttribute("role", "tab");
 			tab_button.setAttribute("aria-selected", String(tab.id === this.active_tab_id));
-			tab_button.innerHTML = tab.type === "file" ? '<i class="fas fa-file-alt"></i>' : '<i class="fas fa-folder"></i>';
+			tab_button.innerHTML = tab.type === "file" ? '<i class="fas fa-file-alt"></i>'
+				: tab.type === "terminal" ? '<i class="fas fa-terminal"></i>' : '<i class="fas fa-folder"></i>';
 			const label = document.createElement("span");
 			label.textContent = path === "/" ? "/" : path.split("/").filter(Boolean).pop();
 			tab_button.appendChild(label);
