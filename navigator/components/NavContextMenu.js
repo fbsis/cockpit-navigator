@@ -37,6 +37,7 @@ export class NavContextMenu {
 		});
 		
 		var functions = [
+			["open_in_new_tab", '<div><i class="fas fa-folder-open"></i></div>', "Open in new tab"],
 			["new_dir", '<div><i class="fas fa-folder-plus"></i></div>'],
 			["new_file", '<div><i class="fas fa-file-medical"></i></div>'],
 			["new_link", '<div><i class="fas fa-link nav-icon-decorated"><i class="fas fa-plus nav-icon-decoration"></i></i></div>'],
@@ -62,6 +63,10 @@ export class NavContextMenu {
 			this.dom_element.appendChild(elem);
 			this.menu_options[func[0]] = elem;
 		}
+	}
+
+	open_in_new_tab(e) {
+		this.nav_window_ref.tab_manager.open_directory(this.target.path_str());
 	}
 
 	new_dir(e) {
@@ -291,12 +296,15 @@ export class NavContextMenu {
 		if (this.nav_window_ref.selected_entries.size > 1) {
 			this.menu_options["rename"].style.display = "none";
 			this.menu_options["preview"].style.display = "none";
+			this.menu_options["open_in_new_tab"].style.display = "none";
 		} else {
 			if (target instanceof NavDirLink || target instanceof NavFileLink)
 				this.menu_options["download"].style.display = "none";
 		}
 		if (!this.nav_window_ref.media_viewer.is_candidate(target))
 			this.menu_options["preview"].style.display = "none";
+		if (!(target instanceof NavDir))
+			this.menu_options["open_in_new_tab"].style.display = "none";
 		if (!this.nav_window_ref.clip_board.length)
 			this.menu_options["paste"].style.display = "none";
 		this.target = target;

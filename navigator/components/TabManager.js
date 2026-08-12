@@ -235,6 +235,18 @@ export class TabManager {
 		this.activate_tab(tab.id);
 	}
 
+	open_directory(path) {
+		const path_stack = this.nav_window_ref.build_path_stack(path || "/");
+		const tab = {
+			id: this.next_id++,
+			type: "directory",
+			path_stack,
+			path_stack_index: path_stack.length - 1,
+		};
+		this.tabs.push(tab);
+		this.activate_tab(tab.id);
+	}
+
 	async open_file(path, display_path = path) {
 		await this.ready;
 		const existing_tab = this.tabs.find(tab => tab.type === "file" && tab.path === path);
