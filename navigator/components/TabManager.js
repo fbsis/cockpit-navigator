@@ -315,6 +315,7 @@ export class TabManager {
 	}
 
 	show_file(tab) {
+		this.nav_window_ref.directory_size_manager.cancel();
 		this.file_view.style.display = "none";
 		this.editor.style.display = "flex";
 		this.set_directory_controls_disabled(true);

@@ -5,6 +5,10 @@ export class DirectorySizeManager {
 		this.nav_window_ref = nav_window_ref;
 		this.process = null;
 		this.generation = 0;
+		window.addEventListener("pagehide", () => this.cancel());
+		cockpit.addEventListener?.("visibilitychange", () => {
+			if (cockpit.hidden) this.cancel();
+		});
 	}
 
 	cancel() {
@@ -15,14 +19,22 @@ export class DirectorySizeManager {
 		}
 	}
 
-	start(entries) {
+	start(entries, timeout = 10, method = "incremental", force = false) {
 		this.cancel();
 		const directories = entries.filter(entry => entry.nav_type === "dir" && entry.visible);
 		if (!directories.length) return;
+		if (this.nav_window_ref.pwd().path_str() === "/" && !force) {
+			for (const entry of directories) this.render(entry, null, "root-deferred");
+			return;
+		}
 		const generation = this.generation;
 		const by_path = new Map(directories.map(entry => [entry.path_str(), entry]));
-		for (const entry of directories) this.render(entry, 0, "progress");
-		const command = ["/usr/share/cockpit/navigator/scripts/directory-sizes.py3", ...by_path.keys()];
+		for (const entry of directories)
+			this.render(entry, method === "du" ? null : 0, method === "du" ? "calculating" : "progress");
+		const command = [
+			"/usr/share/cockpit/navigator/scripts/directory-sizes.py3",
+			"--timeout", String(timeout), "--method", method, ...by_path.keys(),
+		];
 		const process = this.process = cockpit.spawn(command, { superuser: "try", err: "ignore" });
 		let buffer = "";
 		process.stream(data => {
@@ -47,7 +59,7 @@ export class DirectorySizeManager {
 	}
 
 	render(entry, bytes, state) {
-		entry.stat.size = bytes;
+		if (bytes !== null) entry.stat.size = bytes;
 		let element = entry.dom_element.nav_item_size;
 		if (!element) {
 			element = document.createElement("div");
@@ -56,10 +68,28 @@ export class DirectorySizeManager {
 		}
 		const icon = state === "timeout"
 			? '<i class="fas fa-hourglass-end nav-dir-size-timeout"></i> '
-			: state === "progress" ? '<i class="fas fa-spinner fa-spin"></i> ' : "";
-		element.innerHTML = icon + format_bytes(bytes);
+			: state === "root-deferred" ? '<i class="fas fa-hourglass-half nav-dir-size-timeout"></i> '
+			: ["progress", "calculating"].includes(state) ? '<i class="fas fa-spinner fa-spin"></i> ' : "";
+		element.innerHTML = state === "calculating" ? icon + "Calculating…"
+			: state === "root-deferred" ? icon + "Not calculated" : icon + format_bytes(bytes);
+		element.classList.toggle("nav-dir-size-retry", ["timeout", "root-deferred"].includes(state));
 		element.title = state === "timeout"
-			? "Size calculation stopped after 10 seconds. Open this folder to calculate its children instead."
-			: state === "progress" ? "Calculating folder size…" : "Calculated folder size";
+			? "Stopped after the time limit. Click to retry this folder for up to 5 minutes."
+			: state === "root-deferred"
+				? "Automatic size calculation is disabled at the Linux root to avoid scanning large system trees. Click to calculate only this folder."
+			: ["progress", "calculating"].includes(state) ? "Calculating folder size…" : "Calculated folder size";
+		element.onclick = ["timeout", "root-deferred"].includes(state) ? async event => {
+			event.preventDefault();
+			event.stopPropagation();
+			const fromRoot = state === "root-deferred";
+			const retry = await this.nav_window_ref.modal_prompt.confirm(
+				fromRoot ? `Calculate ${entry.path_str()}?` : "Calculate this folder for up to 5 minutes?",
+				fromRoot
+					? "Automatic calculation is disabled at the Linux root because system directories may be very large. Only this selected folder will be scanned, for up to 5 minutes."
+					: "The calculation will stop immediately if you leave this screen.",
+			);
+			if (retry && entry.dom_element.isConnected && entry.visible)
+				this.start([entry], 300, "du", true);
+		} : null;
 	}
 }

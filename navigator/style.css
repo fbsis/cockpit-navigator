@@ -470,6 +470,11 @@ input[type="text"] {
 	color: #f0ab00;
 }
 
+.nav-dir-size-retry {
+	cursor: pointer;
+	text-decoration: underline dotted;
+}
+
 .contents-view-grid > .nav-item > .nav-item-icon {
 	position: relative;
 	text-align: center;
