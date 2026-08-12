@@ -48,6 +48,7 @@ export class NavContextMenu {
 			["rename", '<div><i class="fas fa-i-cursor"></i></div>'],
 			["delete", '<div><i class="fas fa-trash-alt"></i></div>'],
 			["download", '<div><i class="fas fa-download"></i></div>'],
+			["preview", '<div><i class="fas fa-eye"></i></div>', "Preview"],
 			["properties", '<div><i class="fas fa-sliders-h"></i></div>']
 		];
 		for (let func of functions) {
@@ -249,6 +250,10 @@ export class NavContextMenu {
 		const downloader = new NavDownloader(download_target);
 		downloader.download();
 	  }
+
+	preview(e) {
+		this.nav_window_ref.media_viewer.open_entry(this.target);
+	}
 	  
 
 	delete(e) {
@@ -285,10 +290,13 @@ export class NavContextMenu {
 		}
 		if (this.nav_window_ref.selected_entries.size > 1) {
 			this.menu_options["rename"].style.display = "none";
+			this.menu_options["preview"].style.display = "none";
 		} else {
 			if (target instanceof NavDirLink || target instanceof NavFileLink)
 				this.menu_options["download"].style.display = "none";
 		}
+		if (!this.nav_window_ref.media_viewer.is_candidate(target))
+			this.menu_options["preview"].style.display = "none";
 		if (!this.nav_window_ref.clip_board.length)
 			this.menu_options["paste"].style.display = "none";
 		this.target = target;

@@ -24,6 +24,7 @@ import { NavDragDrop } from "./NavDragDrop.js";
 import { SortFunctions } from "./SortFunctions.js";
 import { ModalPrompt } from "./ModalPrompt.js";
 import { TransferManager } from "./TransferManager.js";
+import { MediaViewer } from "./MediaViewer.js";
 import { format_bytes, format_permissions } from "../functions.js";
 
 export class NavWindow {
@@ -50,6 +51,7 @@ export class NavWindow {
 
 		this.modal_prompt = new ModalPrompt();
 		this.transfer_manager = new TransferManager(this);
+		this.media_viewer = new MediaViewer(this);
 
 		this.dangerous_dirs = [
 			"/",

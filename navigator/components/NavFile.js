@@ -100,6 +100,9 @@ export class NavFile extends NavEntry {
 			return false;
 		}
 
+		if (await this.nav_window_ref.media_viewer.open_entry(this))
+			return;
+
 		if (await isEditable(this.path_str(), this.stat['size']) || await this.nav_window_ref.modal_prompt.confirm(`'${this.filename}' is not a text file. Open it anyway?`, "WARNING: this may lead to file corruption.", true)) {
 			this.nav_window_ref.tab_manager.open_file(this.path_str());
 		}
@@ -188,6 +191,8 @@ export class NavFileLink extends NavFile {
 
 	async open() {
 		var target_path = this.get_link_target_path();
+		if (await this.nav_window_ref.media_viewer.open_entry(this))
+			return;
 		var proc_output = await cockpit.spawn(["file", "--mime-type", target_path], { superuser: "try" });
 		var fields = proc_output.split(/:(?=[^:]+$)/); // ensure it's the last : with lookahead
 		var type = fields[1].trim();
