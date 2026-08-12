@@ -43,6 +43,29 @@ I created and maintain the following improvements in this fork. My goal is to tr
 | ![Edit Contents](doc/ui_editor.png) | ![Edit Preferences](doc/ui_prefs.png) |
 
 # Installation
+
+## Quick migration to this fork
+
+Run the command below as a user with `sudo` access. It creates timestamped backups of the previous source checkout and the currently installed Navigator, clones this repository into `/usr/share/cockpit/cockpit-navigator`, installs the fork, and restarts Cockpit. If installation fails, both previous directories are restored automatically.
+
+```bash
+sudo bash -c 'set -Eeuo pipefail; nav_source=/usr/share/cockpit/cockpit-navigator; nav_runtime=/usr/share/cockpit/navigator; nav_backup_dir=/root/cockpit-navigator-backups; nav_stamp=$(date +%Y%m%d-%H%M%S); nav_source_backup="$nav_backup_dir/cockpit-navigator-source-$nav_stamp.tar.gz"; nav_runtime_backup="$nav_backup_dir/navigator-runtime-$nav_stamp.tar.gz"; mkdir -p "$nav_backup_dir"; if [ -d "$nav_source" ]; then tar -C /usr/share/cockpit -czf "$nav_source_backup" cockpit-navigator; fi; if [ -d "$nav_runtime" ]; then tar -C /usr/share/cockpit -czf "$nav_runtime_backup" navigator; fi; rm -rf -- "$nav_source"; git clone --depth 1 https://github.com/fbsis/cockpit-navigator.git "$nav_source"; rm -rf -- "$nav_runtime"; if ! make -C "$nav_source" install; then rm -rf -- "$nav_source" "$nav_runtime"; if [ -f "$nav_source_backup" ]; then tar -C /usr/share/cockpit -xzf "$nav_source_backup"; fi; if [ -f "$nav_runtime_backup" ]; then tar -C /usr/share/cockpit -xzf "$nav_runtime_backup"; fi; exit 1; fi; systemctl restart cockpit.socket; echo "Cockpit Navigator installed. Source: $nav_source | Backups: $nav_backup_dir"'
+```
+
+Backups are stored in:
+
+```text
+/root/cockpit-navigator-backups/
+```
+
+After future code changes are pushed to this repository, update the server installation with:
+
+```bash
+cd /usr/share/cockpit/cockpit-navigator && sudo git pull && sudo make install && sudo systemctl restart cockpit.socket
+```
+
+The source checkout remains in `/usr/share/cockpit/cockpit-navigator`. The `make install` command publishes its `navigator/` package to `/usr/share/cockpit/navigator`, which is the runtime path expected by the plugin's internal scripts.
+
 ## From Github Release
 ### Ubuntu
 1. `$ wget https://github.com/45Drives/cockpit-navigator/releases/download/v0.5.10/cockpit-navigator_0.5.10-1focal_all.deb`
