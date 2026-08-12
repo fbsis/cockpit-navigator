@@ -165,6 +165,7 @@ export class TabManager {
 	}
 
 	show_directory(tab) {
+		this.code_editor.deactivate();
 		this.editor.style.display = "none";
 		this.file_view.style.display = "flex";
 		this.nav_window_ref.path_stack = tab.path_stack;
@@ -177,6 +178,7 @@ export class TabManager {
 		this.editor.style.display = "flex";
 		this.set_directory_controls_disabled(true);
 		this.editor_header.textContent = `Editing ${tab.display_path}`;
+		this.code_editor.activate();
 		this.code_editor.show(tab.path);
 	}
 

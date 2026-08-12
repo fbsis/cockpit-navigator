@@ -8,6 +8,7 @@ const DEFAULT_SETTINGS = {
 	showLineNumbers: true,
 	tabSize: 4,
 	useSoftTabs: true,
+	showFileProperties: false,
 };
 
 export class CodeEditor {
@@ -16,6 +17,9 @@ export class CodeEditor {
 		this.callbacks = callbacks;
 		this.container = document.getElementById("nav-code-editor");
 		this.settings_panel = document.getElementById("nav-editor-settings-panel");
+		this.editor_view = document.getElementById("nav-edit-contents-view");
+		this.info_column = document.getElementById("nav-info-column");
+		this.info_spacer = document.getElementById("nav-info-spacer");
 		this.sessions = new Map();
 		this.active_path = null;
 		this.editor = null;
@@ -33,12 +37,13 @@ export class CodeEditor {
 		this.normalize_settings();
 		this.build_editor();
 		this.bind_settings();
+		this.bind_layout_controls();
 	}
 
 	normalize_settings() {
 		if (!["none", "inline", "split"].includes(this.settings.diffMode))
 			this.settings.diffMode = DEFAULT_SETTINGS.diffMode;
-		for (const key of ["liveAutocompletion", "softWrap", "showLineNumbers", "useSoftTabs"])
+		for (const key of ["liveAutocompletion", "softWrap", "showLineNumbers", "useSoftTabs", "showFileProperties"])
 			this.settings[key] = typeof this.settings[key] === "boolean" ? this.settings[key] : DEFAULT_SETTINGS[key];
 		this.settings.fontSize = this.clamp_number(this.settings.fontSize, 10, 32, DEFAULT_SETTINGS.fontSize);
 		this.settings.tabSize = this.clamp_number(this.settings.tabSize, 1, 16, DEFAULT_SETTINGS.tabSize);
@@ -106,6 +111,62 @@ export class CodeEditor {
 				button.setAttribute("aria-expanded", "false");
 			}
 		});
+	}
+
+	bind_layout_controls() {
+		this.properties_button = document.getElementById("nav-editor-properties-btn");
+		this.fullscreen_button = document.getElementById("nav-editor-fullscreen-btn");
+		this.properties_button.addEventListener("click", () => {
+			this.settings.showFileProperties = !this.settings.showFileProperties;
+			this.apply_properties_visibility();
+			this.schedule_save_settings();
+		});
+		this.fullscreen_button.addEventListener("click", () => this.toggle_fullscreen());
+		window.addEventListener("keydown", event => {
+			if (event.key === "Escape" && this.editor_view.classList.contains("nav-editor-fullscreen")) {
+				event.preventDefault();
+				this.set_fullscreen(false);
+			}
+		});
+		this.properties_button.setAttribute("aria-pressed", String(this.settings.showFileProperties));
+		this.properties_button.classList.toggle("pf-m-primary", this.settings.showFileProperties);
+		this.properties_button.classList.toggle("pf-m-secondary", !this.settings.showFileProperties);
+	}
+
+	apply_properties_visibility() {
+		const show = this.settings.showFileProperties && !this.editor_view.classList.contains("nav-editor-fullscreen");
+		this.info_column.style.display = show ? "flex" : "none";
+		this.info_spacer.style.display = show ? "block" : "none";
+		this.properties_button.setAttribute("aria-pressed", String(this.settings.showFileProperties));
+		this.properties_button.classList.toggle("pf-m-primary", this.settings.showFileProperties);
+		this.properties_button.classList.toggle("pf-m-secondary", !this.settings.showFileProperties);
+		this.resize();
+	}
+
+	toggle_fullscreen() {
+		this.set_fullscreen(!this.editor_view.classList.contains("nav-editor-fullscreen"));
+	}
+
+	set_fullscreen(enabled) {
+		this.editor_view.classList.toggle("nav-editor-fullscreen", enabled);
+		this.fullscreen_button.setAttribute("aria-pressed", String(enabled));
+		this.fullscreen_button.title = enabled ? "Exit fullscreen" : "Enter fullscreen";
+		this.fullscreen_button.setAttribute("aria-label", this.fullscreen_button.title);
+		const icon = this.fullscreen_button.querySelector("i");
+		icon.classList.toggle("fa-expand", !enabled);
+		icon.classList.toggle("fa-compress", enabled);
+		this.apply_properties_visibility();
+	}
+
+	activate() {
+		this.apply_properties_visibility();
+		this.resize();
+	}
+
+	deactivate() {
+		this.set_fullscreen(false);
+		this.info_column.style.display = "flex";
+		this.info_spacer.style.display = "block";
 	}
 
 	update_setting(key, field) {

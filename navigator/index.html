@@ -101,7 +101,13 @@
 			<div class="edit-file-contents nav-hidden" id="nav-edit-contents-view">
 				<div class="editor-toolbar">
 					<div class="editor-header" id="nav-edit-contents-header"></div>
-					<button class="pf-c-button pf-m-secondary editor-settings-button" id="nav-editor-settings-btn" title="Editor settings" aria-label="Editor settings" aria-expanded="false"><i class="fas fa-cog"></i></button>
+					<div class="nav-btn-group">
+						<button class="pf-c-button pf-m-secondary" id="nav-editor-properties-btn" title="Show file properties" aria-label="Show file properties" aria-pressed="false"><i class="fas fa-info-circle"></i></button>
+						<div class="horizontal-spacer-sm"></div>
+						<button class="pf-c-button pf-m-secondary" id="nav-editor-fullscreen-btn" title="Enter fullscreen" aria-label="Enter fullscreen" aria-pressed="false"><i class="fas fa-expand"></i></button>
+						<div class="horizontal-spacer-sm"></div>
+						<button class="pf-c-button pf-m-secondary editor-settings-button" id="nav-editor-settings-btn" title="Editor settings" aria-label="Editor settings" aria-expanded="false"><i class="fas fa-cog"></i></button>
+					</div>
 					<div class="editor-settings-panel" id="nav-editor-settings-panel">
 						<label>Diff<select id="nav-editor-diff-mode"><option value="none">Off</option><option value="inline">Inline</option><option value="split">Side by side</option></select></label>
 						<label><span>Live autocompletion</span><input type="checkbox" id="nav-editor-autocomplete"></label>
@@ -121,7 +127,7 @@
 					<button class="disable-while-loading pf-c-button pf-m-primary editor-btn" id="nav-continue-edit-contents-btn" title="Save"><i class="fas fa-save"></i></button>
 				</div>
 			</div>
-			<div class="horizontal-spacer"></div>
+			<div class="horizontal-spacer" id="nav-info-spacer"></div>
 			<div class="nav-info-column min-width-0 flex-col" id="nav-info-column">
 				<div class="flex-col flex-grow" id="nav-show-properties">
 					<div class="flex-row space-between">
