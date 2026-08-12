@@ -79,6 +79,8 @@ export class NavEntry {
 			owner.title = owner.innerText = this.stat["owner"];
 			group.title = group.innerText = this.stat["group"];
 			size.title = size.innerText = format_bytes(this.stat["size"]);
+			this.dom_element.nav_item_size = size;
+			size.classList.add("nav-column-size");
 			modified.title = modified.innerText = format_time(this.stat["mtime"]);
 			created.title = created.innerText = format_time(this.stat["ctime"]);
 			mode.classList.add("nav-item-title", "no-select", "monospace-sm");

@@ -454,6 +454,22 @@ input[type="text"] {
 	overflow-wrap: anywhere;
 }
 
+.nav-dir-size-badge {
+	font-family: "Courier New", Courier, monospace;
+	font-size: 75%;
+	opacity: 0.8;
+	white-space: nowrap;
+}
+
+.contents-view-list .nav-dir-size-badge {
+	font-size: 80%;
+	opacity: 1;
+}
+
+.nav-dir-size-timeout {
+	color: #f0ab00;
+}
+
 .contents-view-grid > .nav-item > .nav-item-icon {
 	position: relative;
 	text-align: center;

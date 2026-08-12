@@ -25,6 +25,7 @@ import { SortFunctions } from "./SortFunctions.js";
 import { ModalPrompt } from "./ModalPrompt.js";
 import { TransferManager } from "./TransferManager.js";
 import { MediaViewer } from "./MediaViewer.js";
+import { DirectorySizeManager } from "./DirectorySizeManager.js";
 import { format_bytes, format_permissions } from "../functions.js";
 
 export class NavWindow {
@@ -52,6 +53,7 @@ export class NavWindow {
 		this.modal_prompt = new ModalPrompt();
 		this.transfer_manager = new TransferManager(this);
 		this.media_viewer = new MediaViewer(this);
+		this.directory_size_manager = new DirectorySizeManager(this);
 
 		this.dangerous_dirs = [
 			"/",
@@ -134,6 +136,7 @@ export class NavWindow {
 	}
 
 	async refresh() {
+		this.directory_size_manager.cancel();
 		localStorage.setItem('navigator-path', `/${this.path_stack[this.path_stack_index].path.join('/')}`);
 
 		var num_dirs = 0;
@@ -183,6 +186,7 @@ export class NavWindow {
 		document.getElementById("nav-num-bytes").innerText = format_bytes(bytes_sum);
 		this.stop_load();
 		this.set_nav_button_state();
+		this.directory_size_manager.start(this.entries);
 	}
 
 	set_nav_button_state() {
@@ -911,6 +915,7 @@ export class NavWindow {
 			else
 				entry.hide();
 		});
+		this.directory_size_manager.start(this.entries);
 	}
 
 	/**
