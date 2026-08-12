@@ -19,6 +19,7 @@
 
 import { ModalPrompt } from "./components/ModalPrompt.js";
 import { NavWindow } from "./components/NavWindow.js";
+import { BookmarkMenu } from "./components/BookmarkMenu.js";
 import { NAVIGATOR_VERSION } from "./version.js";
 
 /**
@@ -96,6 +97,7 @@ function switch_theme(e) {
 }
 
 let nav_window = new NavWindow();
+let bookmark_menu = new BookmarkMenu(nav_window);
 
 function set_up_buttons() {
 	document.getElementById("nav-back-btn").addEventListener("click", nav_window.back.bind(nav_window));
