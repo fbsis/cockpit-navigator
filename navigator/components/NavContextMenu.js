@@ -38,6 +38,7 @@ export class NavContextMenu {
 		
 		var functions = [
 			["open_in_new_tab", '<div><i class="fas fa-folder-open"></i></div>', "Open in new tab"],
+			["open_in_terminal", '<div><i class="fas fa-terminal"></i></div>', "Open in terminal"],
 			["new_dir", '<div><i class="fas fa-folder-plus"></i></div>'],
 			["new_file", '<div><i class="fas fa-file-medical"></i></div>'],
 			["new_link", '<div><i class="fas fa-link nav-icon-decorated"><i class="fas fa-plus nav-icon-decoration"></i></i></div>'],
@@ -67,6 +68,10 @@ export class NavContextMenu {
 
 	open_in_new_tab(e) {
 		this.nav_window_ref.tab_manager.open_directory(this.target.path_str());
+	}
+
+	open_in_terminal(e) {
+		this.nav_window_ref.open_terminal(this.target.path_str());
 	}
 
 	new_dir(e) {
@@ -297,6 +302,7 @@ export class NavContextMenu {
 			this.menu_options["rename"].style.display = "none";
 			this.menu_options["preview"].style.display = "none";
 			this.menu_options["open_in_new_tab"].style.display = "none";
+			this.menu_options["open_in_terminal"].style.display = "none";
 		} else {
 			if (target instanceof NavDirLink || target instanceof NavFileLink)
 				this.menu_options["download"].style.display = "none";
@@ -305,6 +311,8 @@ export class NavContextMenu {
 			this.menu_options["preview"].style.display = "none";
 		if (!(target instanceof NavDir))
 			this.menu_options["open_in_new_tab"].style.display = "none";
+		if (!(target instanceof NavDir))
+			this.menu_options["open_in_terminal"].style.display = "none";
 		if (!this.nav_window_ref.clip_board.length)
 			this.menu_options["paste"].style.display = "none";
 		this.target = target;

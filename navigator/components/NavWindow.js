@@ -227,6 +227,10 @@ export class NavWindow {
 		if(this.pwd().path_str() !== '/')
 			this.cd(new NavDir(this.pwd().parent_dir()));
 	}
+
+	open_terminal(path = this.pwd().path_str()) {
+		cockpit.jump(`/system/terminal?folder=${encodeURIComponent(path)}`);
+	}
 	
 	clear_selected() {
 		if (this.editing_permissions)

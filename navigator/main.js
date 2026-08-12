@@ -107,6 +107,7 @@ function set_up_buttons() {
 	document.getElementById("nav-forward-btn").addEventListener("click", nav_window.forward.bind(nav_window));
 	document.getElementById("nav-up-dir-btn").addEventListener("click", nav_window.up.bind(nav_window));
 	document.getElementById("nav-refresh-btn").addEventListener("click", nav_window.refresh.bind(nav_window));
+	document.getElementById("nav-terminal-btn").addEventListener("click", () => nav_window.open_terminal());
 	document.getElementById("nav-clipboard-btn").addEventListener("click", () => nav_window.transfer_manager.enqueue_from_clipboard());
 	document.getElementById("nav-mkdir-btn").addEventListener("click", nav_window.mkdir.bind(nav_window));
 	document.getElementById("nav-touch-btn").addEventListener("click", nav_window.touch.bind(nav_window));
