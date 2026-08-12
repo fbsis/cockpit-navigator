@@ -50,6 +50,7 @@ export class NavContextMenu {
 			["rename", '<div><i class="fas fa-i-cursor"></i></div>'],
 			["delete", '<div><i class="fas fa-trash-alt"></i></div>'],
 			["download", '<div><i class="fas fa-download"></i></div>'],
+			["create_archive", '<div><i class="fas fa-file-archive"></i></div>', "Create archive…"],
 			["preview", '<div><i class="fas fa-eye"></i></div>', "Preview"],
 			["properties", '<div><i class="fas fa-sliders-h"></i></div>']
 		];
@@ -264,6 +265,42 @@ export class NavContextMenu {
 	preview(e) {
 		this.nav_window_ref.media_viewer.open_entry(this.target);
 	}
+
+	async create_archive(e) {
+		const response = await this.nav_window_ref.modal_prompt.prompt("Create archive", {
+			name: { label: "File name:", type: "text", default: "archive.zip" },
+		});
+		if (!response) return;
+		let name = response.name.trim();
+		if (!name || name.includes("/")) {
+			this.nav_window_ref.modal_prompt.alert("Invalid archive name.", "Use a file name without `/`.");
+			return;
+		}
+		let format;
+		if (name.toLowerCase().endsWith(".tar.gz") || name.toLowerCase().endsWith(".tgz")) format = "tar.gz";
+		else if (name.toLowerCase().endsWith(".zip")) format = "zip";
+		else {
+			format = await this.nav_window_ref.modal_prompt.choose("Archive format", "Choose the archive format.", [
+				{ label: "ZIP", value: "zip", primary: true },
+				{ label: "tar.gz", value: "tar.gz" },
+				{ label: "Cancel", value: null },
+			]);
+			if (!format) return;
+			name += format === "zip" ? ".zip" : ".tar.gz";
+		}
+		const cwd = this.nav_window_ref.pwd().path_str();
+		const command = ["/usr/share/cockpit/navigator/scripts/create-archive.py3", format, cwd, `${cwd}/${name}`];
+		for (const entry of this.nav_window_ref.selected_entries) command.push(entry.path_str());
+		this.nav_window_ref.start_load();
+		try {
+			await cockpit.spawn(command, { superuser: "try", err: "out" });
+			await this.nav_window_ref.refresh();
+		} catch (error) {
+			this.nav_window_ref.modal_prompt.alert("Could not create archive.", error.message || String(error));
+		} finally {
+			this.nav_window_ref.stop_load();
+		}
+	}
 	  
 
 	delete(e) {
@@ -297,6 +334,7 @@ export class NavContextMenu {
 			this.menu_options["move_to_tab"].style.display = "none";
 			this.menu_options["delete"].style.display = "none";
 			this.menu_options["download"].style.display = "none";
+			this.menu_options["create_archive"].style.display = "none";
 		}
 		if (this.nav_window_ref.selected_entries.size > 1) {
 			this.menu_options["rename"].style.display = "none";
