@@ -934,6 +934,54 @@ input:checked + .slider:before {
 	text-overflow: ellipsis;
 }
 
+.nav-transfer-notification {
+	display: flex;
+	width: min(360px, calc(100vw - 40px));
+	border: 1px solid var(--border);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+	gap: 5px;
+}
+
+.nav-transfer-header {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 24px;
+	align-items: center;
+	gap: 5px;
+}
+
+.nav-transfer-header > p {
+	margin: 0;
+}
+
+.nav-transfer-cancel {
+	border: 0;
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+	padding: 3px;
+}
+
+.nav-transfer-current {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: 0.9em;
+}
+
+.nav-transfer-details {
+	display: flex;
+	justify-content: space-between;
+	gap: 1em;
+}
+
+.nav-transfer-notification progress {
+	width: 100%;
+}
+
+.nav-transfer-error {
+	border-color: var(--danger, #c9190b);
+}
+
 .no-border {
 	border: none;
 }

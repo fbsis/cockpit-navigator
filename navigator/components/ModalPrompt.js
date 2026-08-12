@@ -155,6 +155,27 @@ export class ModalPrompt {
 		});
 	}
 
+	choose(header, message, choices) {
+		this.set_header(header);
+		this.set_body(message);
+		this.footer.innerHTML = "";
+		this.show();
+		return new Promise(resolve => {
+			for (const choice of choices) {
+				const button = document.createElement("button");
+				button.type = "button";
+				button.innerText = choice.label;
+				button.classList.add("pf-c-button", choice.danger ? "pf-m-danger" : (choice.primary ? "pf-m-primary" : "pf-m-secondary"));
+				button.onclick = () => {
+					this.hide();
+					resolve(choice.value);
+				};
+				this.footer.appendChild(button);
+			}
+			this.footer.firstElementChild?.focus();
+		});
+	}
+
 	/**
 	 * 
 	 * @param {string} header 
@@ -259,4 +280,3 @@ export class ModalPrompt {
 		});
 	}
 }
-

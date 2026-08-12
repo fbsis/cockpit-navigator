@@ -23,6 +23,7 @@ import { NavContextMenu } from "./NavContextMenu.js";
 import { NavDragDrop } from "./NavDragDrop.js";
 import { SortFunctions } from "./SortFunctions.js";
 import { ModalPrompt } from "./ModalPrompt.js";
+import { TransferManager } from "./TransferManager.js";
 import { format_bytes, format_permissions } from "../functions.js";
 
 export class NavWindow {
@@ -48,6 +49,7 @@ export class NavWindow {
 		this.sort_function = new SortFunctions();
 
 		this.modal_prompt = new ModalPrompt();
+		this.transfer_manager = new TransferManager(this);
 
 		this.dangerous_dirs = [
 			"/",
@@ -663,6 +665,7 @@ export class NavWindow {
 		this.copy_or_move = "move";
 		this.paste_cwd = this.pwd().path_str();
 		this.context_menu.menu_options["paste"].style.display = "flex";
+		this.update_clipboard_button();
 	}
 
 	copy() {
@@ -670,78 +673,30 @@ export class NavWindow {
 		this.copy_or_move = "copy";
 		this.paste_cwd = this.pwd().path_str();
 		this.context_menu.menu_options["paste"].style.display = "flex";
+		this.update_clipboard_button();
 	}
 
 	paste() {
-		this.paste_clipboard();
-		this.context_menu.hide_paste();
+		this.paste_clipboard(this.pwd().path_str());
 	}
 
-	async paste_clipboard() {
-		this.start_load();
-		var cmd = ["/usr/share/cockpit/navigator/scripts/paste.py3"];
-		var dest = this.pwd().path_str();
-		if (this.copy_or_move === "move") {
-			cmd.push("-m");
-		}
-		cmd.push(this.paste_cwd);
-		for (let item of this.clip_board) {
-			cmd.push(item.path_str());
-		}
-		cmd.push(dest);
-		this.clip_board.length = 0; // clear clipboard
-		var promise = new Promise((resolve, reject) => {
-			var proc = cockpit.spawn(
-				cmd,
-				{superuser: "try", err: "ignore"}
-			);
-			proc.stream(async (data) => {
-				var payload = JSON.parse(data);
-				if (payload["wants-response"]) {
-					if (payload.hasOwnProperty("conflicts")) {
-						let requests = {};
-						for (let conflict of payload["conflicts"]) {
-							requests[conflict[0]] = {
-								label: conflict[1],
-								type: "checkbox",
-								default: false
-							}
-						}
-						this.stop_load();
-						let responses = await this.modal_prompt.prompt("Overwrite?", requests);
-						this.start_load();
-						if (responses === null) {
-							proc.input(JSON.stringify("abort") + "\n");
-							return;
-						}
-						let keepers = [];
-						for (let response of Object.keys(responses)) {
-							if (responses[response])
-								keepers.push(response)
-						}
-						proc.input(JSON.stringify(keepers) + "\n", true);
-					} else {
-						var user_response = await this.modal_prompt.confirm(payload["message"]);
-						proc.input(JSON.stringify(user_response) + "\n", true);
-					}
-				} else {
-					await this.modal_prompt.alert(payload["message"]);
-				}
-			});
-			proc.done((data) => {
-				resolve();
-			});
-			proc.fail((e, data) => {
-				reject("Paste failed.");
-			});
-		});
-		try {
-			await promise;
-		} catch(e) {
-			this.modal_prompt.alert(e);
-		}
-		this.stop_load();
-		this.refresh();
+	paste_clipboard(destination = null) {
+		if (!this.clip_board.length)
+			return;
+		const tab = this.tab_manager?.active_tab();
+		this.transfer_manager.enqueue_from_clipboard(destination ? {
+			path: destination,
+			tab_id: tab?.type === "directory" ? tab.id : null,
+		} : null);
+	}
+
+	update_clipboard_button() {
+		const button = document.getElementById("nav-clipboard-btn");
+		if (!button) return;
+		button.hidden = !this.clip_board.length;
+		button.title = this.clip_board.length
+			? `${this.copy_or_move === "move" ? "Move" : "Copy"} ${this.clip_board.length} item(s) to an open tab`
+			: "Clipboard is empty";
 	}
 
 	/**

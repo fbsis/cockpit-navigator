@@ -42,6 +42,8 @@ export class NavContextMenu {
 			["new_link", '<div><i class="fas fa-link nav-icon-decorated"><i class="fas fa-plus nav-icon-decoration"></i></i></div>'],
 			["cut", '<div><i class="fas fa-cut"></i></div>'],
 			["copy", '<div><i class="fas fa-copy"></i></div>'],
+			["copy_to_tab", '<div><i class="fas fa-folder-open"></i></div>', "Copy to open tab…"],
+			["move_to_tab", '<div><i class="fas fa-share"></i></div>', "Move to open tab…"],
 			["paste", '<div><i class="fas fa-paste"></i></div>'],
 			["rename", '<div><i class="fas fa-i-cursor"></i></div>'],
 			["delete", '<div><i class="fas fa-trash-alt"></i></div>'],
@@ -52,7 +54,7 @@ export class NavContextMenu {
 			var elem = document.createElement("div");
 			var name_list = func[0].split("_");
 			name_list.forEach((word, index) => {name_list[index] = word.charAt(0).toUpperCase() + word.slice(1)});
-			elem.innerHTML = func[1] + name_list.join(" ");
+			elem.innerHTML = func[1] + (func[2] || name_list.join(" "));
 			elem.addEventListener("click", (e) => {this[func[0]].bind(this, e).apply()});
 			elem.classList.add("nav-context-menu-item")
 			elem.id = "nav-context-menu-" + func[0];
@@ -82,6 +84,14 @@ export class NavContextMenu {
 
 	copy(e) {
 		this.nav_window_ref.copy();
+	}
+
+	copy_to_tab(e) {
+		this.nav_window_ref.transfer_manager.enqueue_selection("copy");
+	}
+
+	move_to_tab(e) {
+		this.nav_window_ref.transfer_manager.enqueue_selection("move");
 	}
 
 	paste(e) {
@@ -268,6 +278,8 @@ export class NavContextMenu {
 		if (this.nav_window_ref.none_selected()) {
 			this.menu_options["copy"].style.display = "none";
 			this.menu_options["cut"].style.display = "none";
+			this.menu_options["copy_to_tab"].style.display = "none";
+			this.menu_options["move_to_tab"].style.display = "none";
 			this.menu_options["delete"].style.display = "none";
 			this.menu_options["download"].style.display = "none";
 		}
