@@ -235,9 +235,9 @@ export class TabManager {
 			});
 		}
 		this.tabs.splice(closing_index, 1);
-		if (closing_tab.type === "file")
-			this.code_editor.destroy_session(closing_tab.path);
 		if (was_active) {
+			if (closing_tab.type === "file")
+				this.code_editor.detach_session(closing_tab.path);
 			const next_tab = this.tabs[Math.min(closing_index, this.tabs.length - 1)];
 			this.active_tab_id = next_tab.id;
 			if (next_tab.type === "directory") {
@@ -246,6 +246,8 @@ export class TabManager {
 				this.show_file(next_tab);
 			}
 		}
+		if (closing_tab.type === "file")
+			this.code_editor.destroy_session(closing_tab.path);
 		this.render();
 	}
 

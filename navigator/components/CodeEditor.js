@@ -35,6 +35,8 @@ export class CodeEditor {
 		ace.config.set("workerPath", "ace");
 		this.settings = await this.config_store.section("editor", DEFAULT_SETTINGS);
 		this.normalize_settings();
+		this.idle_session = ace.createEditSession("", "ace/mode/text");
+		this.idle_session.setOption("useWorker", false);
 		this.build_editor();
 		this.bind_settings();
 		this.bind_layout_controls();
@@ -60,6 +62,7 @@ export class CodeEditor {
 		host.className = "nav-ace-pane";
 		this.container.appendChild(host);
 		this.editor = ace.edit(host);
+		this.editor.setSession(this.idle_session);
 		this.editor.setTheme("ace/theme/one_dark");
 		this.editor.setOption("useWorker", false);
 		this.apply_options(this.editor);
@@ -236,8 +239,8 @@ export class CodeEditor {
 	show(path) {
 		if (!path || !this.sessions.has(path))
 			return;
-		this.active_path = path;
 		this.destroy_diff_view();
+		this.active_path = path;
 		const model = this.sessions.get(path);
 		if (this.settings.diffMode === "none") {
 			if (!this.editor)
@@ -326,12 +329,20 @@ export class CodeEditor {
 			this.show(path);
 	}
 	destroy_session(path) {
-		if (path === this.active_path) this.destroy_diff_view();
+		this.detach_session(path);
 		this.sessions.get(path)?.session.destroy?.();
 		this.sessions.delete(path);
 	}
+	detach_session(path) {
+		if (path !== this.active_path)
+			return;
+		this.destroy_diff_view();
+		if (this.editor && this.idle_session)
+			this.editor.setSession(this.idle_session);
+		this.active_path = null;
+	}
 	resize() {
 		if (this.diff_view) this.diff_view.resize(true);
-		else this.editor?.resize(true);
+		else if (this.editor?.getSession?.()) this.editor.resize(true);
 	}
 }
