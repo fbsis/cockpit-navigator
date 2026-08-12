@@ -14,7 +14,7 @@ With no command line use needed, you can:
 
 ## Features added by Felipe Braga
 
-The following improvements were created and maintained by [Felipe Braga](https://github.com/fbsis) in this fork:
+I created and maintain the following improvements in this fork. My goal is to transform Cockpit Navigator into a more complete, self-contained file manager, so I can perform day-to-day server file operations without relying on another tool. I took inspiration from the practical workflow of Midnight Commander (`mc`), while taking advantage of a modern web interface, tabs, integrated editing, previews, transfers, snapshots, and terminal access. — [Felipe Braga](https://github.com/fbsis)
 
 * **Directory bookmarks** saved per Linux user in `~/.config/cockpit-navigator/config.json`.
 * **Directory navigation tabs**, including opening a folder in a new tab from the context menu.
