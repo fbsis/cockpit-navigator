@@ -117,10 +117,11 @@ export class CodeEditor {
 	}
 
 	bind_layout_controls() {
-		this.properties_button = document.getElementById("nav-editor-properties-btn");
+		this.sidebar_toggle = document.getElementById("nav-sidebar-toggle");
 		this.fullscreen_button = document.getElementById("nav-editor-fullscreen-btn");
-		this.properties_button.addEventListener("click", () => {
-			this.settings.showFileProperties = !this.settings.showFileProperties;
+		this.sidebar_toggle.checked = this.settings.showFileProperties;
+		this.sidebar_toggle.addEventListener("change", () => {
+			this.settings.showFileProperties = this.sidebar_toggle.checked;
 			this.apply_properties_visibility();
 			this.schedule_save_settings();
 		});
@@ -131,18 +132,14 @@ export class CodeEditor {
 				this.set_fullscreen(false);
 			}
 		});
-		this.properties_button.setAttribute("aria-pressed", String(this.settings.showFileProperties));
-		this.properties_button.classList.toggle("pf-m-primary", this.settings.showFileProperties);
-		this.properties_button.classList.toggle("pf-m-secondary", !this.settings.showFileProperties);
+		this.apply_properties_visibility();
 	}
 
 	apply_properties_visibility() {
 		const show = this.settings.showFileProperties && !this.editor_view.classList.contains("nav-editor-fullscreen");
 		this.info_column.style.display = show ? "flex" : "none";
 		this.info_spacer.style.display = show ? "block" : "none";
-		this.properties_button.setAttribute("aria-pressed", String(this.settings.showFileProperties));
-		this.properties_button.classList.toggle("pf-m-primary", this.settings.showFileProperties);
-		this.properties_button.classList.toggle("pf-m-secondary", !this.settings.showFileProperties);
+		this.sidebar_toggle.checked = this.settings.showFileProperties;
 		this.resize();
 	}
 
@@ -168,8 +165,7 @@ export class CodeEditor {
 
 	deactivate() {
 		this.set_fullscreen(false);
-		this.info_column.style.display = "flex";
-		this.info_spacer.style.display = "block";
+		this.apply_properties_visibility();
 	}
 
 	update_setting(key, field) {
