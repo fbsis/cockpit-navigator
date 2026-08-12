@@ -1049,6 +1049,10 @@ input:checked + .slider:before {
 	gap: 8px;
 }
 
+.nav-media-video-actions [hidden] {
+	display: none;
+}
+
 .nav-media-video-header strong {
 	min-width: 0;
 	overflow: hidden;

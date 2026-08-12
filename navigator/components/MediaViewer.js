@@ -73,10 +73,42 @@ export class MediaViewer {
 		}).read();
 		if (contents === null)
 			throw new Error("File no longer exists.");
+		return this.create_object_url(contents, mime);
+	}
+
+	create_object_url(contents, mime) {
 		const blob = new Blob([contents], { type: mime });
 		const url = URL.createObjectURL(blob);
 		this.object_urls.add(url);
 		return url;
+	}
+
+	async file_size(path) {
+		const output = await cockpit.spawn(
+			["stat", "-Lc", "%s", path],
+			{ superuser: "try", err: "out" }
+		);
+		const size = Number(output.trim());
+		if (!Number.isFinite(size))
+			throw new Error("Could not determine video size.");
+		return size;
+	}
+
+	async read_video_preview(entry, mime) {
+		const path = this.path_for(entry);
+		const size = await this.file_size(path);
+		if (size <= VIDEO_LIMIT)
+			return { url: await this.read_blob(entry, mime, VIDEO_LIMIT), partial: false };
+
+		await this.nav_window_ref.modal_prompt.alert(
+			"Preview limited to the first 200 MB",
+			"This video is larger than 200 MB. Navigator will load only its first 200 MB. Some video containers, especially MP4 files with metadata at the end, may not play from a partial file. Use Download from the context menu to get the complete video."
+		);
+		const contents = await cockpit.spawn(
+			["head", "-c", String(VIDEO_LIMIT), path],
+			{ binary: true, superuser: "try", err: "message" }
+		);
+		return { url: this.create_object_url(contents, mime), partial: true };
 	}
 
 	image_dimensions(url) {
@@ -232,11 +264,14 @@ export class MediaViewer {
 
 	async open_video(entry, mime) {
 		try {
-			const url = await this.read_blob(entry, mime, VIDEO_LIMIT);
+			if (!this.video_modal.hidden)
+				this.close_video();
+			const { url, partial } = await this.read_video_preview(entry, mime);
 			this.video.src = url;
-			this.video_title.textContent = entry.filename;
+			this.video_title.textContent = partial ? `${entry.filename} — first 200 MB` : entry.filename;
 			this.video_download.href = url;
 			this.video_download.download = entry.filename;
+			this.video_download.hidden = partial;
 			this.video_modal.hidden = false;
 			await this.video.play().catch(() => {});
 		} catch (error) {
