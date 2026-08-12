@@ -19,7 +19,7 @@
 /**
  * @typedef {Object} Request
  * @property {string} label
- * @property {"text"|"checkbox"} type
+ * @property {"text"|"checkbox"|"select"} type
  * @property {string|undefined} default
  */
 
@@ -219,18 +219,27 @@ export class ModalPrompt {
 			label.style.paddingRight = "1em";
 			label.style.flexBasis = "0";
 			label.style.flexGrow = "1";
-			let req = document.createElement("input");
+			let req = document.createElement(request.type === "select" ? "select" : "input");
 			req.id = key;
 			req.type = request.type;
 			req.style.flexBasis = "0";
 			if (request.hasOwnProperty("default")) {
 				req.value = request.default;
 			}
+			if (request.type === "select") {
+				for (const option of request.options || []) {
+					const item = document.createElement("option");
+					item.value = option.value;
+					item.innerText = option.label;
+					req.appendChild(item);
+				}
+			}
 			row.append(label, req);
 			req_holder.appendChild(row);
 			inputs.push(req);
 			switch (request.type) {
 				case "text":
+				case "select":
 					req.style.flexGrow = "3";
 					break;
 				case "checkbox":

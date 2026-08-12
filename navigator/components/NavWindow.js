@@ -26,6 +26,7 @@ import { ModalPrompt } from "./ModalPrompt.js";
 import { TransferManager } from "./TransferManager.js";
 import { MediaViewer } from "./MediaViewer.js";
 import { DirectorySizeManager } from "./DirectorySizeManager.js";
+import { ZfsSnapshotManager } from "./ZfsSnapshotManager.js";
 import { format_bytes, format_permissions } from "../functions.js";
 
 export class NavWindow {
@@ -54,6 +55,7 @@ export class NavWindow {
 		this.transfer_manager = new TransferManager(this);
 		this.media_viewer = new MediaViewer(this);
 		this.directory_size_manager = new DirectorySizeManager(this);
+		this.zfs_snapshot_manager = new ZfsSnapshotManager(this);
 
 		this.dangerous_dirs = [
 			"/",

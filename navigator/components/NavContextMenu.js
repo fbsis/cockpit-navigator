@@ -53,6 +53,7 @@ export class NavContextMenu {
 			["create_archive", '<div><i class="fas fa-file-archive"></i></div>', "Create archive…"],
 			["extract_archive", '<div><i class="fas fa-box-open"></i></div>', "Extract to…"],
 			["preview", '<div><i class="fas fa-eye"></i></div>', "Preview"],
+			["snapshot_history", '<div><i class="fas fa-history"></i></div>', "Snapshot history…"],
 			["properties", '<div><i class="fas fa-sliders-h"></i></div>']
 		];
 		for (let func of functions) {
@@ -267,6 +268,11 @@ export class NavContextMenu {
 		this.nav_window_ref.media_viewer.open_entry(this.target);
 	}
 
+	snapshot_history(e) {
+		this.hide();
+		this.nav_window_ref.zfs_snapshot_manager.show_history(this.target);
+	}
+
 	async create_archive(e) {
 		const response = await this.nav_window_ref.modal_prompt.prompt("Create archive", {
 			name: { label: "File name:", type: "text", default: "archive.zip" },
@@ -342,6 +348,7 @@ export class NavContextMenu {
 	 * @param {NavEntry} target 
 	 */
 	show(event, target) {
+		const shownTarget = target;
 		if (!this.nav_window_ref.none_selected()) {
 			if (event.shiftKey || event.ctrlKey)
 				this.nav_window_ref.set_selected(target, event.shiftKey, event.ctrlKey);
@@ -351,6 +358,7 @@ export class NavContextMenu {
 		for (let option of Object.keys(this.menu_options)) {
 			this.menu_options[option].style.display = "flex"; // show all
 		}
+		this.menu_options["snapshot_history"].style.display = "none";
 		// selectively hide options based on context
 		if (this.nav_window_ref.none_selected()) {
 			this.menu_options["copy"].style.display = "none";
@@ -382,6 +390,10 @@ export class NavContextMenu {
 			this.menu_options["paste"].style.display = "none";
 		this.target = target;
 		this.dom_element.style.display = "inline";
+		this.nav_window_ref.zfs_snapshot_manager.supported(target.path_str()).then(supported => {
+			if (supported && this.target === shownTarget && this.dom_element.style.display !== "none")
+				this.menu_options["snapshot_history"].style.display = "flex";
+		});
 		this.dom_element.style.left = event.clientX + "px";
 		var height = this.dom_element.getBoundingClientRect().height;
 		var max_height = window.innerHeight;

@@ -31,6 +31,7 @@ The following improvements were created and maintained by [Felipe Braga](https:/
 * **Copy and move between open directory tabs** using the clipboard button or context menu.
 * **Image preview gallery** powered by PhotoSwipe, with zoom, keyboard and gesture navigation, and previous/next navigation based on the currently visible file list.
 * **Video preview** using the browser's native video controls, with offline local-file loading and download fallback.
+* **ZFS snapshot history and restore** for individual files and folders, with cached filesystem detection, safe merge restoration, and automatic preservation of replaced content.
 
 | Browsing Filesystem |
 |---------------------|
