@@ -40,6 +40,7 @@ export class TabManager {
 		const initial_tab = this.directory_tab_from_window();
 		this.tabs.push(initial_tab);
 		this.active_tab_id = initial_tab.id;
+		this.rendered_directory_tab_id = initial_tab.id;
 		this.render();
 	}
 
@@ -139,10 +140,17 @@ export class TabManager {
 		this.active_tab_id = tab.id;
 		this.render();
 		if (tab.type === "directory") {
-			this.show_directory(tab);
-			this.nav_window_ref.refresh();
+			this.activate_directory_view(tab);
 		} else {
 			this.show_file(tab);
+		}
+	}
+
+	activate_directory_view(tab) {
+		this.show_directory(tab);
+		if (this.rendered_directory_tab_id !== tab.id) {
+			this.rendered_directory_tab_id = tab.id;
+			this.nav_window_ref.refresh();
 		}
 	}
 
@@ -212,8 +220,7 @@ export class TabManager {
 			const next_tab = this.tabs[Math.min(closing_index, this.tabs.length - 1)];
 			this.active_tab_id = next_tab.id;
 			if (next_tab.type === "directory") {
-				this.show_directory(next_tab);
-				this.nav_window_ref.refresh();
+				this.activate_directory_view(next_tab);
 			} else {
 				this.show_file(next_tab);
 			}
