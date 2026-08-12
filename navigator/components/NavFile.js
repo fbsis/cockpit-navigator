@@ -101,7 +101,7 @@ export class NavFile extends NavEntry {
 		}
 
 		if (await isEditable(this.path_str(), this.stat['size']) || await this.nav_window_ref.modal_prompt.confirm(`'${this.filename}' is not a text file. Open it anyway?`, "WARNING: this may lead to file corruption.", true)) {
-			this.show_edit_file_contents();
+			this.nav_window_ref.tab_manager.open_file(this.path_str());
 		}
 	}
 
@@ -193,7 +193,7 @@ export class NavFileLink extends NavFile {
 		var type = fields[1].trim();
 
 		if ((/^text/.test(type) || /^inode\/x-empty$/.test(type) || this.stat["size"] === 0)) {
-			this.show_edit_file_contents();
+			this.nav_window_ref.tab_manager.open_file(target_path, this.path_str());
 		} else {
 			console.log("Unknown mimetype: " + type);
 			this.nav_window_ref.modal_prompt.alert("Can't open " + this.filename + " for editing.");
