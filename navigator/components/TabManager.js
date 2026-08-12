@@ -11,6 +11,7 @@ import { CodeEditor } from "./CodeEditor.js";
 export class TabManager {
 	constructor(nav_window_ref, config_store) {
 		this.nav_window_ref = nav_window_ref;
+		this.config_store = config_store;
 		this.nav_window_ref.tab_manager = this;
 		this.tab_list = document.getElementById("nav-tab-list");
 		this.new_tab_button = document.getElementById("nav-new-tab-btn");
@@ -20,6 +21,9 @@ export class TabManager {
 		this.tabs = [];
 		this.next_id = 1;
 		this.active_tab_id = null;
+		this.restoring_workspace = true;
+		this.workspace_save_timer = null;
+		this.workspace_save_error_shown = false;
 
 		this.new_tab_button.addEventListener("click", () => this.create_directory_tab());
 		document.getElementById("nav-continue-edit-contents-btn").onclick = () => this.save_active_file();
@@ -28,7 +32,7 @@ export class TabManager {
 			onChange: (path, modified) => this.on_editor_change(path, modified),
 			onError: (title, error) => this.nav_window_ref.modal_prompt.alert(title, error.message || String(error)),
 		});
-		this.ready = this.code_editor.ready;
+		this.ready = this.initialize_workspace();
 		window.addEventListener("keydown", event => {
 			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s" && this.active_tab()?.type === "file") {
 				event.preventDefault();
@@ -39,6 +43,7 @@ export class TabManager {
 		this.nav_window_ref.navigation_change_handler = () => {
 			this.sync_active_directory();
 			this.render();
+			this.persist_workspace();
 		};
 
 		const initial_tab = this.directory_tab_from_window();
@@ -46,6 +51,129 @@ export class TabManager {
 		this.active_tab_id = initial_tab.id;
 		this.rendered_directory_tab_id = initial_tab.id;
 		this.render();
+	}
+
+	async initialize_workspace() {
+		await this.code_editor.ready;
+		try {
+			const user = await cockpit.user();
+			this.workspace_storage_key = `navigator-workspace:${user.name || user.user || "unknown"}`;
+		} catch (error) {
+			this.workspace_storage_key = "navigator-workspace:unknown";
+		}
+		this.workspace = await this.config_store.section("workspace", { tabs: [], activeIndex: 0 });
+		let saved = this.workspace;
+		try {
+			const local = JSON.parse(localStorage.getItem(this.workspace_storage_key) || "null");
+			if (local && Array.isArray(local.tabs) && Number(local.updatedAt) >= Number(saved.updatedAt || 0))
+				saved = local;
+		} catch (error) {
+			console.warn("Could not read local workspace snapshot.", error);
+		}
+		await this.restore_workspace(saved);
+		this.restoring_workspace = false;
+		this.persist_workspace();
+	}
+
+	async restore_workspace(saved) {
+		if (!Array.isArray(saved?.tabs) || !saved.tabs.length)
+			return;
+		const restored_tabs = [];
+		const restored_by_index = new Map();
+		const restored_file_paths = new Set();
+		const failures = [];
+		for (const [index, descriptor] of saved.tabs.entries()) {
+			if (!descriptor || typeof descriptor.path !== "string" || !descriptor.path.startsWith("/"))
+				continue;
+			if (descriptor.type === "directory") {
+				const path_stack = this.nav_window_ref.build_path_stack(descriptor.path);
+				const tab = {
+					id: this.next_id++, type: "directory", path_stack,
+					path_stack_index: path_stack.length - 1,
+				};
+				restored_tabs.push(tab);
+				restored_by_index.set(index, tab);
+			} else if (descriptor.type === "file") {
+				if (restored_file_paths.has(descriptor.path))
+					continue;
+				try {
+					const contents = await cockpit.file(descriptor.path, { superuser: "try" }).read();
+					if (contents === null) throw new Error("File no longer exists");
+					const display_path = typeof descriptor.displayPath === "string" ? descriptor.displayPath : descriptor.path;
+					const tab = {
+						id: this.next_id++, type: "file", path: descriptor.path, display_path,
+						parent_path: display_path.substring(0, display_path.lastIndexOf("/")) || "/",
+						modified: false,
+					};
+					this.code_editor.create_session(tab.path, contents, tab.display_path);
+					restored_file_paths.add(tab.path);
+					restored_tabs.push(tab);
+					restored_by_index.set(index, tab);
+				} catch (error) {
+					failures.push(`${descriptor.path}: ${error.message || String(error)}`);
+				}
+			}
+		}
+		if (!restored_tabs.length)
+			return;
+		this.tabs = restored_tabs;
+		const requested_index = Number.isInteger(saved.activeIndex) ? saved.activeIndex : 0;
+		const active = restored_by_index.get(requested_index) || restored_tabs[0];
+		this.active_tab_id = active.id;
+		if (active.type === "directory") {
+			this.rendered_directory_tab_id = active.id;
+			this.show_directory(active);
+		} else {
+			this.show_file(active);
+		}
+		this.render();
+		if (failures.length) {
+			await this.nav_window_ref.modal_prompt.alert(
+				"Some tabs could not be restored.",
+				failures.map(message => `<div>${this.escape_html(message)}</div>`).join("")
+			);
+		}
+	}
+
+	workspace_snapshot() {
+		this.sync_active_directory();
+		return {
+			tabs: this.tabs.map(tab => tab.type === "directory"
+				? { type: "directory", path: this.current_path(tab) }
+				: { type: "file", path: tab.path, displayPath: tab.display_path }),
+			activeIndex: Math.max(0, this.tabs.findIndex(tab => tab.id === this.active_tab_id)),
+			updatedAt: Date.now(),
+		};
+	}
+
+	persist_workspace() {
+		if (this.restoring_workspace || !this.workspace)
+			return;
+		const snapshot = this.workspace_snapshot();
+		Object.assign(this.workspace, snapshot);
+		try {
+			localStorage.setItem(this.workspace_storage_key, JSON.stringify(snapshot));
+		} catch (error) {
+			console.warn("Could not save local workspace snapshot.", error);
+		}
+		clearTimeout(this.workspace_save_timer);
+		this.workspace_save_timer = setTimeout(async () => {
+			try {
+				await this.config_store.save();
+				this.workspace_save_error_shown = false;
+			} catch (error) {
+				if (!this.workspace_save_error_shown) {
+					this.workspace_save_error_shown = true;
+					this.nav_window_ref.modal_prompt.alert("Could not save open tabs.", error.message || String(error));
+				}
+			}
+		}, 250);
+	}
+
+	escape_html(value) {
+		const element = document.createElement("div");
+		element.textContent = value;
+		return element.innerHTML;
 	}
 
 	active_tab() {
@@ -154,6 +282,7 @@ export class TabManager {
 		} else {
 			this.show_file(tab);
 		}
+		this.persist_workspace();
 	}
 
 	activate_directory_view(tab) {
@@ -249,6 +378,7 @@ export class TabManager {
 		if (closing_tab.type === "file")
 			this.code_editor.destroy_session(closing_tab.path);
 		this.render();
+		this.persist_workspace();
 	}
 
 	render() {
