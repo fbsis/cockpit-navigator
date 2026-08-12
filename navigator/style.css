@@ -481,6 +481,84 @@ input[type="text"] {
 	white-space: nowrap;
 }
 
+.nav-terminal-commands-container {
+	position: relative;
+	margin-left: auto;
+}
+
+.nav-terminal-commands-menu {
+	display: none;
+	position: absolute;
+	top: calc(100% + 0.4rem);
+	right: 0;
+	z-index: 30;
+	min-width: 280px;
+	max-width: min(520px, 80vw);
+	max-height: 60vh;
+	overflow-y: auto;
+	flex-direction: column;
+	padding: 0.35rem;
+	color: var(--font);
+	background: var(--container);
+	border: 1px solid var(--border);
+	border-radius: var(--nav-border-radius);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.nav-terminal-command-add,
+.nav-terminal-command-run,
+.nav-terminal-command-remove {
+	border: 0;
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+}
+
+.nav-terminal-command-add,
+.nav-terminal-command-run {
+	display: flex;
+	align-items: center;
+	gap: 0.65rem;
+	padding: 0.6rem 0.7rem;
+	text-align: left;
+}
+
+.nav-terminal-command-add:hover,
+.nav-terminal-command-run:hover,
+.nav-terminal-command-remove:hover {
+	background: var(--selected);
+}
+
+.nav-terminal-command-item {
+	display: flex;
+	min-width: 0;
+}
+
+.nav-terminal-command-run {
+	flex: 1;
+	min-width: 0;
+}
+
+.nav-terminal-command-run span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.nav-terminal-command-remove {
+	padding: 0.6rem 0.75rem;
+}
+
+.nav-terminal-command-separator {
+	border-top: 1px solid var(--border);
+	margin: 0.3rem 0;
+}
+
+.nav-terminal-commands-empty {
+	opacity: 0.65;
+	padding: 0.7rem;
+}
+
 .nav-terminal-host,
 .nav-terminal-session {
 	min-width: 0;

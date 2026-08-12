@@ -34,7 +34,7 @@ export class TabManager {
 			onChange: (path, modified) => this.on_editor_change(path, modified),
 			onError: (title, error) => this.nav_window_ref.modal_prompt.alert(title, error.message || String(error)),
 		});
-		this.terminal_manager = new TerminalManager(nav_window_ref);
+		this.terminal_manager = new TerminalManager(nav_window_ref, config_store);
 		this.ready = this.initialize_workspace();
 		window.addEventListener("keydown", event => {
 			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s" && this.active_tab()?.type === "file") {

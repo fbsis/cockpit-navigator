@@ -19,6 +19,7 @@ The following improvements were created and maintained by [Felipe Braga](https:/
 * **Directory bookmarks** saved per Linux user in `~/.config/cockpit-navigator/config.json`.
 * **Directory navigation tabs**, including opening a folder in a new tab from the context menu.
 * **Integrated xterm.js terminal tabs** opened directly in the selected folder, with independent live PTY sessions inside Navigator.
+* **Saved terminal commands** stored per Linux user and executed with one click only in the currently active terminal tab.
 * **Editable file tabs** that keep each directory tab in its previous navigation state.
 * **Persistent open tabs**: directory paths, file tabs, tab order, and the active tab are restored after reloading Cockpit.
 * **Ace code editor** with a permanently dark theme, syntax highlighting, line numbers, independent file sessions, undo/redo, cursor and scroll preservation.
