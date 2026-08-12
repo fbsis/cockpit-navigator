@@ -94,9 +94,9 @@
 					<div class="contents-view-list-header nav-item">
 						<i class="nav-item-icon"></i>
 						<div class="nav-item-title" id="sort-name-btn">Name<i class="sort-arrow fas fa-chevron-up" id="sort-name-icon"></i></div>
-						<div class="nav-item-title" id="sort-mode-btn">Mode</div>
-						<div class="nav-item-title" id="sort-owner-btn">Owner<i class="sort-arrow fas" id="sort-owner-icon"></i></div>
-						<div class="nav-item-title" id="sort-group-btn">Group<i class="sort-arrow fas" id="sort-group-icon"></i></div>
+						<div class="nav-item-title nav-column-technical" id="sort-mode-btn">Mode</div>
+						<div class="nav-item-title nav-column-technical" id="sort-owner-btn">Owner<i class="sort-arrow fas" id="sort-owner-icon"></i></div>
+						<div class="nav-item-title nav-column-technical" id="sort-group-btn">Group<i class="sort-arrow fas" id="sort-group-icon"></i></div>
 						<div class="nav-item-title" id="sort-size-btn">Size<i class="sort-arrow fas" id="sort-size-icon"></i></div>
 						<div class="nav-item-title" id="sort-modified-btn">Modified<i class="sort-arrow fas" id="sort-modified-icon"></i></div>
 						<div class="nav-item-title" id="sort-created-btn">Created<i class="sort-arrow fas" id="sort-created-icon"></i></div>
@@ -233,6 +233,17 @@
 					<div class="horizontal-spacer-sm"></div>
 					<label class="switch" title="Toggle Dark/Light">
 						<input type="checkbox" id="toggle-theme">
+						<span class="slider round"></span>
+					</label>
+				</div>
+			</div>
+			<div class="horizontal-spacer"></div>
+			<div class="nav-toggle">
+				<div class="nav-btn-group">
+					<i class="fas fa-id-card" title="Technical columns"></i>
+					<div class="horizontal-spacer-sm"></div>
+					<label class="switch" title="Show Mode, Owner and Group columns">
+						<input type="checkbox" id="nav-technical-columns-toggle" aria-label="Show Mode, Owner and Group columns">
 						<span class="slider round"></span>
 					</label>
 				</div>

@@ -98,6 +98,25 @@ function switch_theme(e) {
 	localStorage.setItem("houston-theme-state", state);
 }
 
+async function set_up_technical_columns(config_store) {
+	const layout = await config_store.section("layout", { showTechnicalColumns: true });
+	const toggle = document.getElementById("nav-technical-columns-toggle");
+	const apply = () => {
+		document.body.classList.toggle("nav-hide-technical-columns", !layout.showTechnicalColumns);
+		toggle.checked = layout.showTechnicalColumns;
+	};
+	toggle.addEventListener("change", async () => {
+		layout.showTechnicalColumns = toggle.checked;
+		apply();
+		try {
+			await config_store.save();
+		} catch (error) {
+			nav_window.modal_prompt.alert("Could not save column preferences.", error.message || String(error));
+		}
+	});
+	apply();
+}
+
 let nav_window = new NavWindow();
 let bookmark_menu;
 let tab_manager;
@@ -160,6 +179,7 @@ async function main() {
 		await nav_window.modal_prompt.alert("Could not load Navigator settings.", error.message || String(error));
 	}
 	bookmark_menu = new BookmarkMenu(nav_window, config_store);
+	await set_up_technical_columns(config_store);
 	tab_manager = new TabManager(nav_window, config_store);
 	await tab_manager.ready;
 	set_last_theme_state();

@@ -86,6 +86,9 @@ export class NavEntry {
 			mode.classList.add("nav-item-title", "no-select", "monospace-sm");
 			owner.classList.add("nav-item-title", "no-select");
 			group.classList.add("nav-item-title", "no-select");
+			mode.classList.add("nav-column-technical");
+			owner.classList.add("nav-column-technical");
+			group.classList.add("nav-column-technical");
 			size.classList.add("nav-item-title", "no-select");
 			modified.classList.add("nav-item-title", "no-select");
 			created.classList.add("nav-item-title", "no-select");
