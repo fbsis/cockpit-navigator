@@ -51,6 +51,7 @@ export class NavContextMenu {
 			["delete", '<div><i class="fas fa-trash-alt"></i></div>'],
 			["download", '<div><i class="fas fa-download"></i></div>'],
 			["create_archive", '<div><i class="fas fa-file-archive"></i></div>', "Create archive…"],
+			["extract_archive", '<div><i class="fas fa-box-open"></i></div>', "Extract to…"],
 			["preview", '<div><i class="fas fa-eye"></i></div>', "Preview"],
 			["properties", '<div><i class="fas fa-sliders-h"></i></div>']
 		];
@@ -301,6 +302,30 @@ export class NavContextMenu {
 			this.nav_window_ref.stop_load();
 		}
 	}
+
+	is_archive(target) {
+		if (!(target instanceof NavFile)) return false;
+		return /\.(zip|tar|tar\.gz|tgz|tar\.bz2|tbz2|tar\.xz|txz)$/i.test(target.filename);
+	}
+
+	async extract_archive(e) {
+		const destination = await this.nav_window_ref.transfer_manager.choose_destination();
+		if (!destination) return;
+		this.nav_window_ref.start_load();
+		try {
+			await cockpit.spawn(
+				["/usr/share/cockpit/navigator/scripts/extract-archive.py3", this.target.path_str(), destination.path],
+				{ superuser: "try", err: "out" }
+			);
+			this.nav_window_ref.transfer_manager.refresh_tabs({
+				source_root: this.nav_window_ref.pwd().path_str(), destination: destination.path,
+			});
+		} catch (error) {
+			this.nav_window_ref.modal_prompt.alert("Could not extract archive.", error.message || String(error));
+		} finally {
+			this.nav_window_ref.stop_load();
+		}
+	}
 	  
 
 	delete(e) {
@@ -347,6 +372,8 @@ export class NavContextMenu {
 		}
 		if (!this.nav_window_ref.media_viewer.is_candidate(target))
 			this.menu_options["preview"].style.display = "none";
+		if (this.nav_window_ref.selected_entries.size !== 1 || !this.is_archive(target))
+			this.menu_options["extract_archive"].style.display = "none";
 		if (!(target instanceof NavDir))
 			this.menu_options["open_in_new_tab"].style.display = "none";
 		if (!(target instanceof NavDir))
