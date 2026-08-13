@@ -27,14 +27,18 @@ import sys
 import json
 
 def main():
-    argv = sys.argv
-    argc = len(sys.argv)
-    if argc <= 1:
+    if len(sys.argv) == 2 and sys.argv[1] == "--stdin-json":
+        paths = json.load(sys.stdin)
+        if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
+            print("Expected a JSON array of paths")
+            sys.exit(1)
+    else:
+        paths = sys.argv[1:]
+    if not paths:
         print("No arguments provided")
         sys.exit(1)
     response = {}
-    for i in range (1, argc):
-        path = argv[i]
+    for path in paths:
         response[path] = os.path.lexists(path)
     print(json.dumps(response))
     sys.exit(0)

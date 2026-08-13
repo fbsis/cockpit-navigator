@@ -1,211 +1,179 @@
-/* 
+/*
 	Cockpit Navigator - A File System Browser for Cockpit.
-	Copyright (C) 2021 Josh Boudreau      <jboudreau@45drives.com>
-	Copyright (C) 2021 Sam Silver         <ssilver@45drives.com>
-	Copyright (C) 2021 Dawson Della Valle <ddellavalle@45drives.com>
+	Copyright (C) 2021 Josh Boudreau, Sam Silver, Dawson Della Valle
+	Distributed under the GNU General Public License, version 3 or later.
+*/
 
-	This file is part of Cockpit Navigator.
-	Cockpit Navigator is free software: you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation, either version 3 of the License, or
-	(at your option) any later version.
-	Cockpit Navigator is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
-	You should have received a copy of the GNU General Public License
-	along with Cockpit Navigator.  If not, see <https://www.gnu.org/licenses/>.
- */
-
-import { NavWindow } from "./NavWindow.js";
 import { format_time_remaining } from "../functions.js";
-import { ModalPrompt } from "./ModalPrompt.js";
 
 export class FileUpload {
-	/**
-	 * 
-	 * @param {File|Blob} file 
-	 * @param {NavWindow} nav_window_ref
-	 * @param {string|undefined} path_prefix 
-	 */
-	constructor(file, nav_window_ref, path_prefix = "") {
+	constructor(file, destination, relative_path = file.name) {
 		try {
-			this.chunk_size = (parseInt(cockpit.info.version) > 238)? 1048576 : 65536;
-		} catch(e) {
-			console.log(e);
+			this.chunk_size = parseInt(cockpit.info.version) > 238 ? 1048576 : 65536;
+		} catch (_) {
 			this.chunk_size = 65536;
 		}
-		this.filename = path_prefix + file.name;
-		this.nav_window_ref = nav_window_ref;
-		this.path = nav_window_ref.pwd().path_str() + "/" + this.filename;
-		this.reader = new FileReader();
-		this.chunks = this.slice_file(file);
-		this.chunk_index = 0;
-		this.modal_prompt = new ModalPrompt();
-		this.using_webkit = true;
-		this.make_html_element();
+		this.file = file;
+		this.filename = relative_path.replace(/^\/+/, "");
+		this.destination = destination.replace(/\/$/, "") || "/";
+		this.path = `${this.destination}/${this.filename}`.replace(/^\/\//, "/");
+		this.state = "queued";
+		this.bytes_sent = 0;
+		this.rate_avg = 0;
+		this.eta = 0;
+		this.progress_timestamp = undefined;
+		this.error = "";
+		this.proc = null;
+		this.cancelled = false;
+		this.transport_closed = false;
+		this.replace_existing = false;
+		this.can_retry = true;
+		this.on_update = () => {};
 	}
 
-	make_html_element() {
-		var notification = this.dom_element = document.createElement("div");
-		notification.classList.add("nav-notification");
-
-		var header = document.createElement("div");
-		header.classList.add("nav-notification-header");
-		notification.appendChild(header);
-		header.style.display = "grid";
-		header.style.gridTemplateColumns = "1fr 20px";
-		header.style.gap = "5px";
-
-		var title = document.createElement("p");
-		title.innerText = "Uploading " + this.filename;
-		title.title = this.filename;
-
-		var cancel = document.createElement("i");
-		cancel.classList.add("fa", "fa-times");
-		cancel.style.justifySelf = "center";
-		cancel.style.alignSelf = "center";
-		cancel.style.cursor = "pointer";
-		cancel.onclick = () => {
-			if (this.proc) {
-				this.reader.onload = () => {};
-				this.done();
-			}
-		}
-
-		header.append(title, cancel);
-
-		var info = document.createElement("div");
-		info.classList.add("flex-row", "space-between");
-		notification.appendChild(info);
-
-		var rate = document.createElement("div");
-		rate.classList.add("monospace-sm");
-		info.appendChild(rate);
-		rate.innerText = "-";
-		this.rate = rate;
-
-		var eta = document.createElement("div");
-		eta.classList.add("monospace-sm");
-		info.appendChild(eta);
-		eta.innerText = "-";
-		this.eta = eta;
-
-		var progress = document.createElement("progress");
-		progress.max = this.num_chunks;
-		notification.appendChild(progress);
-		this.progress = progress;
-
-		this.html_elements = [progress, eta, rate, info, header, notification];
-		document.getElementById("nav-notifications").appendChild(notification);
+	update() {
+		this.on_update(this);
 	}
 
-	remove_html_element() {
-		for (let elem of this.html_elements) {
-			if (elem.parentElement)
-				elem.parentElement.removeChild(elem);
+	progress_percent() {
+		return this.file.size ? Math.min(100, (this.bytes_sent / this.file.size) * 100) : (this.state === "completed" ? 100 : 0);
+	}
+
+	eta_text() {
+		return this.eta > 0 && Number.isFinite(this.eta) ? format_time_remaining(this.eta) : "-";
+	}
+
+	reset() {
+		this.cancelled = false;
+		this.transport_closed = false;
+		this.state = "queued";
+		this.bytes_sent = 0;
+		this.rate_avg = 0;
+		this.eta = 0;
+		this.progress_timestamp = undefined;
+		this.error = "";
+		this.update();
+	}
+
+	cancel() {
+		this.cancelled = true;
+		if (this.reader?.readyState === FileReader.LOADING)
+			this.reader.abort();
+		if (this.state === "queued") {
+			this.state = "cancelled";
+			this.update();
+		} else if (this.state === "uploading" && this.proc) {
+			this.proc.close("terminated");
 		}
 	}
 
-	/**
-	 * 
-	 * @param {File|Blob} file 
-	 * @returns {Blob[]}
-	 */
-	slice_file(file) {
-		var offset = 0;
-		var next_offset;
-		var chunks = [];
-		this.num_chunks = Math.ceil(file.size / this.chunk_size);
-		for (let i = 0; i < this.num_chunks; i++) {
-			next_offset = Math.min(this.chunk_size * (i + 1), file.size);
-			chunks.push(file.slice(offset, next_offset));
-			offset = next_offset;
+	read_chunk(blob) {
+		return new Promise((resolve, reject) => {
+			const reader = new FileReader();
+			this.reader = reader;
+			reader.onload = () => resolve(new Uint8Array(reader.result));
+			reader.onerror = () => reject(reader.error || new Error("Could not read local file."));
+			reader.onabort = () => reject(new Error("Upload cancelled."));
+			reader.readAsArrayBuffer(blob);
+		});
+	}
+
+	encode(bytes) {
+		let binary = "";
+		for (let offset = 0; offset < bytes.length; offset += 0x8000)
+			binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+		return btoa(binary);
+	}
+
+	failure_message(output, error) {
+		const lines = String(output || "").trim().split("\n").filter(Boolean);
+		for (let index = lines.length - 1; index >= 0; index--) {
+			try {
+				const event = JSON.parse(lines[index]);
+				if (event.message) return event.message;
+			} catch (_) { /* plain process output */ }
 		}
-		return chunks;
+		return String(output || error || "Upload failed.").trim();
 	}
 
-	async upload() {
-		this.timestamp = Date.now();
-		this.dom_element.style.display = "flex";
-		this.proc = cockpit.spawn(["/usr/share/cockpit/navigator/scripts/write-chunks.py3", this.path], {err: "out", superuser: "try"});
-		this.proc.fail((e, data) => {
-			this.reader.onload = () => {}
-			this.done();
-			this.nav_window_ref.modal_prompt.alert(e, data);
-		})
-		this.proc.done((data) => {
-			if (!this.done_hook)
-				this.nav_window_ref.refresh();
-		})
-		this.proc.always(() => this?.done_hook?.());
-		this.reader.onerror = (evt) => {
-			this.modal_prompt.alert("Failed to read file: " + this.filename, "Upload of directories not supported.");
-			this.done();
+	async send_chunks(proc) {
+		let offset = 0;
+		while (offset < this.file.size) {
+			if (this.cancelled) throw new Error("Upload cancelled.");
+			if (this.transport_closed) throw new Error("Upload connection closed.");
+			const bytes = await this.read_chunk(this.file.slice(offset, offset + this.chunk_size));
+			if (this.cancelled) throw new Error("Upload cancelled.");
+			if (this.transport_closed) throw new Error("Upload connection closed.");
+			proc.input(JSON.stringify({ seek: offset, chunk: this.encode(bytes) }) + "\n", true);
+			offset += bytes.length;
 		}
-		this.reader.onload = (evt) => {
-			this.write_to_file(evt, this.chunk_index * this.chunk_size);
-			this.chunk_index++;
-			this.progress.value = this.chunk_index;
-			if (this.chunk_index < this.num_chunks)
-				this.reader.readAsDataURL(this.chunks[this.chunk_index]);
-			else {
-				this.done();
-			}
-		};
-		try {
-			this.reader.readAsDataURL(this.chunks[0]);
-		} catch {
-			this.reader.onload = () => {};
-			if (this.using_webkit) {
-				this.proc.input(JSON.stringify({seek: 0, chunk: ""}), true);
-			} else {
-				this.modal_prompt.alert("Failed to read file: " + this.filename, "Upload of directories and empty files not supported.");
-			}
-			this.done();
+		proc.input();
+	}
+
+	handle_process_event(event) {
+		if (event.event === "error" && event.message) {
+			this.process_error = event.message;
+			return;
 		}
-		this.update_rates_interval = setInterval(this.display_xfr_rate.bind(this), 1000);
+		if (event.event !== "progress") return;
+		const now = performance.now();
+		const bytes = Math.max(this.bytes_sent, Number(event.bytes) || 0);
+		if (this.progress_timestamp !== undefined && bytes > this.bytes_sent) {
+			const elapsed = Math.max((now - this.progress_timestamp) / 1000, 0.001);
+			const rate = (bytes - this.bytes_sent) / elapsed;
+			this.rate_avg = this.rate_avg ? 0.125 * rate + 0.875 * this.rate_avg : rate;
+		}
+		this.progress_timestamp = now;
+		this.bytes_sent = bytes;
+		this.eta = this.rate_avg ? (this.file.size - bytes) / this.rate_avg : 0;
+		this.update();
 	}
 
-	/**
-	 * 
-	 * @param {Event} evt 
-	 */
-	write_to_file(evt) {
-		var chunk_b64 = evt.target.result.replace(/^data:[^\/]+\/[^;]+;base64,/, "");
-		const seek = this.chunk_index * this.chunk_size;
-		var obj = {
-			seek: seek,
-			chunk: chunk_b64
-		};
-		this.proc.input(JSON.stringify(obj) + "\n", true);
-		this.update_xfr_rate();
-	}
-
-	done() {
-		this.proc.input(); // close stdin
-		this.remove_html_element();
-		clearInterval(this.update_rates_interval);
-	}
-
-	update_xfr_rate() {
-		var now = Date.now();
-		var elapsed = (now - this.timestamp) / 1000;
-		this.timestamp = now;
-		var rate = this.chunk_size / elapsed;
-		this.rate_avg = (this.rate_avg)
-			? (0.125 * rate + (0.875 * this.rate_avg))
-			: rate;
-		// keep exponential moving average of chunk time for eta
-		this.chunk_time = (this.chunk_time)
-			? (0.125 * elapsed + (0.875 * this.chunk_time))
-			: elapsed;
-		var eta = (this.num_chunks - this.chunk_index) * this.chunk_time;
-		this.eta_avg = eta;
-	}
-
-	display_xfr_rate() {
-		this.rate.innerText = cockpit.format_bytes_per_sec(this.rate_avg);
-		this.eta.innerText = format_time_remaining(this.eta_avg);
+	upload() {
+		this.cancelled = false;
+		this.transport_closed = false;
+		this.state = "uploading";
+		this.error = "";
+		this.process_error = "";
+		this.progress_timestamp = performance.now();
+		this.update();
+		return new Promise(resolve => {
+			const proc = this.proc = cockpit.spawn(
+				["/usr/share/cockpit/navigator/scripts/write-chunks.py3", this.path, String(this.file.size), this.replace_existing ? "replace" : "no-replace"],
+				{ err: "out", superuser: "try" },
+			);
+			let output_buffer = "";
+			proc.stream(data => {
+				output_buffer += data;
+				const lines = output_buffer.split("\n");
+				output_buffer = lines.pop();
+				for (const line of lines) {
+					if (!line.trim()) continue;
+					try { this.handle_process_event(JSON.parse(line)); } catch (_) { /* handled on process failure */ }
+				}
+			});
+			proc.done(() => {
+				this.transport_closed = true;
+				this.bytes_sent = this.file.size;
+				this.state = "completed";
+				this.eta = 0;
+				this.update();
+				resolve(this.state);
+			});
+			proc.fail((error, output) => {
+				this.transport_closed = true;
+				this.state = this.cancelled ? "cancelled" : "error";
+				this.error = this.cancelled ? "Upload cancelled." : (this.process_error || this.failure_message(output, error));
+				this.update();
+				resolve(this.state);
+			});
+			this.send_chunks(proc).catch(error => {
+				this.error = error.message || String(error);
+				if (!this.cancelled) proc.close("terminated");
+			});
+		}).finally(() => {
+			this.proc = null;
+			this.reader = null;
+		});
 	}
 }

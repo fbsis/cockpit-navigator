@@ -1,219 +1,210 @@
-/* 
+/*
 	Cockpit Navigator - A File System Browser for Cockpit.
-	Copyright (C) 2021 Josh Boudreau      <jboudreau@45drives.com>
-	Copyright (C) 2021 Sam Silver         <ssilver@45drives.com>
-	Copyright (C) 2021 Dawson Della Valle <ddellavalle@45drives.com>
-
-	This file is part of Cockpit Navigator.
-	Cockpit Navigator is free software: you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation, either version 3 of the License, or
-	(at your option) any later version.
-	Cockpit Navigator is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
-	You should have received a copy of the GNU General Public License
-	along with Cockpit Navigator.  If not, see <https://www.gnu.org/licenses/>.
- */
+	Copyright (C) 2021 Josh Boudreau, Sam Silver, Dawson Della Valle
+	Distributed under the GNU General Public License, version 3 or later.
+*/
 
 import { FileUpload } from "./FileUpload.js";
-import { ModalPrompt } from "./ModalPrompt.js";
-import { NavWindow } from "./NavWindow.js";
 import { FileUploadManager } from "./FileUploadManager.js";
 
 export class NavDragDrop {
-	/**
-	 * 
-	 * @param {HTMLDivElement} drop_area 
-	 * @param {NavWindow} nav_window_ref 
-	 */
 	constructor(drop_area, nav_window_ref) {
-		drop_area.addEventListener("dragenter", this, false);
-		drop_area.addEventListener("dragover", this, false);
-		drop_area.addEventListener("dragleave", this, false);
-		drop_area.addEventListener("drop", this, false);
+		for (const event of ["dragenter", "dragover", "dragleave", "drop"])
+			drop_area.addEventListener(event, this, false);
 		this.drop_area = drop_area;
 		this.nav_window_ref = nav_window_ref;
-		this.modal_prompt = new ModalPrompt();
-		this.upload_manager = new FileUploadManager(this.nav_window_ref, 6);
-		this.upload_element = document.createElement('input');
-		this.upload_element.type = 'file';
-		this.upload_element.multiple = true;
-		this.upload_element.onchange = async e => {
-			var uploads = []
-			for (const file of e.target.files) {
-				let uploader = new FileUpload(file, this.nav_window_ref);
-				uploader.using_webkit = false;
-				uploads.push(uploader);
-			}
-			if (uploads.length) {
-				uploads = await this.handle_conflicts(uploads);
-				this.upload_manager.add(... uploads);
-			}
-		}
-		document.getElementById("nav-upload-btn").addEventListener("click", this.upload_dialog.bind(this));
+		this.upload_manager = new FileUploadManager(nav_window_ref, 3);
+		this.file_input = this.create_input(false);
+		this.folder_input = this.create_input(true);
+		document.getElementById("nav-upload-btn").addEventListener("click", () => this.upload_manager.show());
+		document.getElementById("nav-upload-select-files").addEventListener("click", () => this.select_from_dialog(this.file_input));
+		document.getElementById("nav-upload-select-folder").addEventListener("click", () => this.select_from_dialog(this.folder_input));
 	}
 
-	/**
-	 * 
-	 * @param {FileSystemEntry} item 
-	 * @param {string} path 
-	 * @returns {Promise<FileUpload[]>}
-	 */
-	async scan_files(item, path) {
-		let new_uploads = [];
-		if (item.isDirectory) {
-			if (!path && !await this.modal_prompt.confirm(`Copy whole directory: ${item.fullPath}?`, "", true))
-				return new_uploads;
-			let directoryReader = item.createReader();
-			let promise = new Promise((resolve, reject) => {
-				directoryReader.readEntries(async (entries) => {
-					for (const entry of entries) {
-						new_uploads.push(... await this.scan_files(entry, path + item.name + "/"));
-					}
-					resolve();
-				});
-			})
-			await promise;
-		} else {
-			let promise = new Promise((resolve, reject) => {
-				item.file((file) => {
-					resolve(file);
-				})
-			});
-			new_uploads.push(new FileUpload(await promise, this.nav_window_ref, path));
-		}
-		return new_uploads;
-	}
- 
-	/**
-	 * 
-	 * @param {DataTransferItemList} items 
-	 * @returns {Promise<DataTransferItemList>}
-	 */
-	handle_drop_advanced(items) {
-		return new Promise(async (resolve, reject) => {
-			let uploads = [];
-			for (let i = 0; i < items.length; i++) {
-				let item = items[i]?.webkitGetAsEntry?.() ?? items[i]?.getAsEntry?.() ?? null;
-				let path = "";
-				if (item) {
-					let new_uploads = await this.scan_files(item, path);
-					uploads.push(... new_uploads);
-				} else {
-					reject();
-				}
-			}
-			resolve(uploads);
-		})
+	select_from_dialog(input) {
+		this.dialog_destination = this.nav_window_ref.pwd().path_str();
+		input.click();
 	}
 
-	/**
-	 * 
-	 * @param {FileUpload[]} uploads 
-	 * @returns {FileUpload[]}
-	 */
-	async handle_conflicts(uploads) {
-		let test_paths = [];
-		for (let upload of uploads)
-			test_paths.push(upload.path);
-		let proc = cockpit.spawn(
-			["/usr/share/cockpit/navigator/scripts/return-exists.py3", ... test_paths],
-			{error: "out", superuser: "try"}
-		);
-		let exist_result;
-		proc.done((data) => {
-			exist_result = JSON.parse(data);
-		});
-		proc.fail((e, data) => {
-			this.nav_window_ref.modal_prompt.alert(e, data);
-		});
+	create_input(folder) {
+		const input = document.createElement("input");
+		input.type = "file";
+		input.multiple = true;
+		input.hidden = true;
+		if (folder) {
+			input.webkitdirectory = true;
+			input.setAttribute("webkitdirectory", "");
+		}
+		input.onchange = async () => {
+			const files = [...input.files].map(file => ({
+				file,
+				relative_path: file.webkitRelativePath || file.name,
+			}));
+			input.value = "";
+			await this.enqueue_files(files, this.dialog_destination);
+		};
+		document.body.appendChild(input);
+		return input;
+	}
+
+	read_entries(reader) {
+		return new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+	}
+
+	entry_file(entry) {
+		return new Promise((resolve, reject) => entry.file(resolve, reject));
+	}
+
+	async scan_entry(entry, parent = "") {
+		const relative_path = `${parent}${entry.name}`;
+		if (entry.isFile) {
+			try {
+				return [{ file: await this.entry_file(entry), relative_path }];
+			} catch (error) {
+				return [this.failed_item(entry.name, relative_path, error)];
+			}
+		}
+		if (!entry.isDirectory) return [];
+		let children = [];
 		try {
-			await proc;
-		} catch {
+			const reader = entry.createReader();
+			while (true) {
+				const batch = await this.read_entries(reader);
+				if (!batch.length) break;
+				children.push(...batch);
+			}
+		} catch (error) {
+			return [this.failed_item(entry.name, relative_path, error)];
+		}
+		const files = [];
+		for (const child of children)
+			files.push(...await this.scan_entry(child, `${relative_path}/`));
+		return files;
+	}
+
+	failed_item(name, relative_path, error) {
+		return {
+			file: new File([], name),
+			relative_path,
+			error: error?.message || String(error || "Could not read dropped item."),
+		};
+	}
+
+	async files_from_drop(data_transfer) {
+		const files = [];
+		for (const item of [...(data_transfer.items || [])]) {
+			const entry = item.webkitGetAsEntry?.() || item.getAsEntry?.();
+			if (entry) {
+				files.push(...await this.scan_entry(entry));
+			} else {
+				const file = item.getAsFile?.();
+				if (file) files.push({ file, relative_path: file.name });
+			}
+		}
+		if (!files.length) {
+			for (const file of [...data_transfer.files])
+				files.push({ file, relative_path: file.webkitRelativePath || file.name });
+		}
+		return this.deduplicate(files);
+	}
+
+	deduplicate(files) {
+		const unique = new Map();
+		for (const item of files) {
+			const path = item.relative_path.replace(/^\/+/, "");
+			if (!path || path.split("/").includes("..")) continue;
+			const key = path;
+			if (!unique.has(key)) unique.set(key, { ...item, relative_path: path });
+		}
+		return [...unique.values()];
+	}
+
+	async existing_paths(paths) {
+		const process = cockpit.spawn(
+			["/usr/share/cockpit/navigator/scripts/return-exists.py3", "--stdin-json"],
+			{ err: "out", superuser: "try" },
+		);
+		process.input(JSON.stringify(paths));
+		return JSON.parse(await process);
+	}
+
+	async resolve_conflicts(uploads) {
+		const candidates = uploads.filter(upload => upload.state === "queued");
+		const existence = candidates.length ? await this.existing_paths(candidates.map(upload => upload.path)) : {};
+		const conflicts = candidates.filter(upload => existence[upload.path]);
+		if (!conflicts.length) return uploads;
+		const policy = await this.nav_window_ref.modal_prompt.choose(
+			`${conflicts.length} upload conflict${conflicts.length === 1 ? "" : "s"}`,
+			`${conflicts.length} destination item${conflicts.length === 1 ? " already exists" : "s already exist"}.`,
+			[
+				{ label: "Replace all", value: "replace", primary: true },
+				{ label: "Skip existing", value: "skip" },
+				{ label: "Cancel", value: "cancel", danger: true },
+			],
+		);
+		if (policy === "cancel" || policy === null) return null;
+		if (policy === "replace") {
+			for (const upload of conflicts) upload.replace_existing = true;
+		}
+		if (policy === "skip") {
+			for (const upload of conflicts) upload.state = "skipped";
+		}
+		return uploads;
+	}
+
+	async enqueue_files(items, destination = this.nav_window_ref.pwd().path_str()) {
+		items = this.deduplicate(items);
+		if (!items.length) {
+			this.upload_manager.set_preparing("");
 			return;
 		}
-		let keepers = [];
-		let requests = {};
-		for (let upload of uploads) {
-			if (!exist_result[upload.path]) {
-				keepers.push(upload.filename);
-				continue;
+		let uploads = items.map(item => {
+			const upload = new FileUpload(item.file, destination, item.relative_path);
+			if (item.error) {
+				upload.state = "error";
+				upload.error = item.error;
+				upload.can_retry = false;
 			}
-			let request = {};
-			request.label = upload.filename;
-			request.type = "checkbox";
-			let id = upload.filename;
-			requests[id] = request;
-		}
-		if (Object.keys(requests).length > 0) {
-			let responses = await this.nav_window_ref.modal_prompt.prompt(
-				"Conflicts found while uploading. Replace?",
-				requests
-			)
-			if (responses === null)
-				return null;
-			for (let key of Object.keys(responses)) {
-				if (responses[key])
-					keepers.push(key);
-			}
-		}
-		return uploads.filter((upload) => keepers.includes(upload.filename));
-	}
-	
-	/**
-	 * 
-	 * @param {Event} e 
-	 */
-	async handleEvent(e) {
-		switch(e.type){
-			case "dragenter":
-				e.preventDefault();
-				e.stopPropagation();
-				this.drop_area.classList.add("drag-enter");
-				break;
-			case "dragover":
-				e.preventDefault();
-				e.stopPropagation();
-				break;
-			case "dragleave":
-				e.preventDefault();
-				e.stopPropagation();
-				this.drop_area.classList.remove("drag-enter");
-				break;
-			case "drop":
-				this.nav_window_ref.start_load();
-				let uploads;
-				let items = e.dataTransfer.items;
-				e.preventDefault();
-				e.stopPropagation();
-				try {
-					uploads = await this.handle_drop_advanced(items);
-				} catch {
-					uploads = [];
-					for (let file of e.dataTransfer.files) {
-						let uploader = new FileUpload(file, this.nav_window_ref);
-						uploader.using_webkit = false;
-						uploads.push(uploader);
-					}
-				}
-				this.drop_area.classList.remove("drag-enter");
-				if (uploads.length === 0) {
-					this.nav_window_ref.stop_load();
-					break;
-				}
-				uploads = await this.handle_conflicts(uploads);
-				this.nav_window_ref.stop_load();
-				this.upload_manager.add(... uploads);
-				break;
-			default:
-				this.drop_area.classList.remove("drag-enter");
-				break;
+			return upload;
+		});
+		try {
+			this.upload_manager.set_preparing("Checking upload conflicts…");
+			uploads = await this.resolve_conflicts(uploads);
+			this.upload_manager.set_preparing("");
+			if (uploads) this.upload_manager.add(uploads, destination);
+		} catch (error) {
+			this.upload_manager.set_preparing("");
+			this.nav_window_ref.modal_prompt.alert("Could not prepare upload.", error.message || String(error));
 		}
 	}
 
-	upload_dialog() {
-		this.upload_element.click();
+	async handleEvent(event) {
+		switch (event.type) {
+			case "dragenter":
+			case "dragover":
+				event.preventDefault();
+				event.stopPropagation();
+				this.drop_area.classList.add("drag-enter");
+				break;
+			case "dragleave":
+				event.preventDefault();
+				event.stopPropagation();
+				if (!this.drop_area.contains(event.relatedTarget)) this.drop_area.classList.remove("drag-enter");
+				break;
+			case "drop":
+				event.preventDefault();
+				event.stopPropagation();
+				this.drop_area.classList.remove("drag-enter");
+				this.upload_manager.show();
+				this.upload_manager.set_preparing("Reading dropped items…");
+				try {
+					const destination = this.nav_window_ref.pwd().path_str();
+					await this.enqueue_files(await this.files_from_drop(event.dataTransfer), destination);
+				} catch (error) {
+					this.upload_manager.set_preparing("");
+					this.nav_window_ref.modal_prompt.alert("Could not read dropped items.", error.message || String(error));
+				}
+				break;
+		}
 	}
 }

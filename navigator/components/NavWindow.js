@@ -188,6 +188,7 @@ export class NavWindow {
 		document.getElementById("nav-num-bytes").innerText = format_bytes(bytes_sum);
 		this.stop_load();
 		this.set_nav_button_state();
+		this.apply_search_filter(document.getElementById("search-bar").value);
 		this.directory_size_manager.start(this.entries);
 	}
 
@@ -905,7 +906,11 @@ export class NavWindow {
 	}
 
 	search_filter(event) {
-		var search_name = event.target.value;
+		this.apply_search_filter(event.target.value);
+		this.directory_size_manager.start(this.entries);
+	}
+
+	apply_search_filter(search_name = "") {
 		let search_func;
 		if (search_name[0] === '*')
 			search_func = (entry) => entry.filename.toLowerCase().includes(search_name.slice(1).toLowerCase());
@@ -917,7 +922,6 @@ export class NavWindow {
 			else
 				entry.hide();
 		});
-		this.directory_size_manager.start(this.entries);
 	}
 
 	/**

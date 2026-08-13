@@ -279,6 +279,30 @@
 			</div>
 		</div>
 	</div>
+	<div class="nav-upload-modal" id="nav-upload-modal" role="dialog" aria-modal="true" aria-labelledby="nav-upload-title">
+		<div class="nav-upload-dialog">
+			<div class="nav-upload-header">
+				<div>
+					<h2 id="nav-upload-title">Uploads</h2>
+					<div id="nav-upload-summary">No uploads</div>
+					<div class="nav-upload-destination" id="nav-upload-destination"></div>
+				</div>
+				<button type="button" class="pf-c-button pf-m-secondary" id="nav-upload-close" title="Continue uploads in background" aria-label="Close upload window"><i class="fas fa-times"></i></button>
+			</div>
+			<div class="nav-upload-picker-actions">
+				<button type="button" class="pf-c-button pf-m-primary" id="nav-upload-select-files"><i class="fas fa-file-upload"></i> Select files</button>
+				<button type="button" class="pf-c-button pf-m-secondary" id="nav-upload-select-folder"><i class="fas fa-folder-open"></i> Select folder</button>
+			</div>
+			<progress id="nav-upload-total-progress" max="1" value="0"></progress>
+			<div class="nav-upload-list" id="nav-upload-list"></div>
+			<div class="nav-upload-footer">
+				<button type="button" class="pf-c-button pf-m-danger" id="nav-upload-cancel-all">Cancel all</button>
+				<button type="button" class="pf-c-button pf-m-secondary" id="nav-upload-clear">Clear finished</button>
+			</div>
+		</div>
+	</div>
+	<button type="button" class="nav-upload-compact" id="nav-upload-compact" hidden><i class="fas fa-upload"></i><span id="nav-upload-compact-text"></span></button>
+	<div class="nav-upload-toasts" id="nav-upload-toasts" aria-live="polite"></div>
 </body>
 <div class="nav-context-menu flex-col" id="nav-context-menu">
 </div>

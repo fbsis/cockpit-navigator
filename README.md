@@ -30,6 +30,7 @@ I created and maintain the following improvements in this fork. My goal is to tr
 * **Improved tab visibility and lifecycle**, with a clearer active tab and safe closing of file sessions.
 * **Queued rsync transfers** with progress, transfer speed, ETA, cancellation, conflict handling, and safer move operations.
 * **Copy and move between open directory tabs** using the clipboard button or context menu.
+* **Visual multi-file and folder uploads** with a three-item queue, per-file and total progress, safe cancellation, retries, conflict handling, and final batch notifications.
 * **Image preview gallery** powered by PhotoSwipe, with zoom, keyboard and gesture navigation, and previous/next navigation based on the currently visible file list.
 * **Video preview** using the browser's native video controls, with offline local-file loading and download fallback.
 * **ZFS snapshot history and restore** for individual files and folders, with cached filesystem detection, safe merge restoration, and automatic preservation of replaced content.
@@ -65,6 +66,33 @@ cd /usr/share/cockpit/cockpit-navigator && sudo git pull && sudo make install &&
 ```
 
 The source checkout remains in `/usr/share/cockpit/cockpit-navigator`. The `make install` command publishes its `navigator/` package to `/usr/share/cockpit/navigator`, which is the runtime path expected by the plugin's internal scripts.
+
+## First installation of this fork
+
+If there is no existing checkout at `/usr/share/cockpit/cockpit-navigator`, install this fork with:
+
+```bash
+sudo git clone --depth 1 \
+  https://github.com/fbsis/cockpit-navigator.git \
+  /usr/share/cockpit/cockpit-navigator
+
+cd /usr/share/cockpit/cockpit-navigator
+sudo make install
+sudo systemctl restart cockpit.socket
+```
+
+The clone already downloads the latest version, so `git pull` is not required during the first installation.
+
+## Updating this fork
+
+For later updates, do not clone the repository again. Run:
+
+```bash
+cd /usr/share/cockpit/cockpit-navigator
+sudo git pull
+sudo make install
+sudo systemctl restart cockpit.socket
+```
 
 ## From Github Release
 ### Ubuntu
