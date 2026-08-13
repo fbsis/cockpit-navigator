@@ -27,8 +27,7 @@ export class TransferManager {
 			value: { tab_id: tab.id, path },
 			primary: index === 0,
 		}));
-		choices.push({ label: "Cancel", value: null });
-		return this.modal.choose("Choose destination", "Select an open directory tab.", choices);
+		return this.modal.choose_list("Choose destination", "Select an open directory tab.", choices);
 	}
 
 	async enqueue_from_clipboard(destination = null) {

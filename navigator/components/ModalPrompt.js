@@ -176,6 +176,36 @@ export class ModalPrompt {
 		});
 	}
 
+	choose_list(header, message, choices) {
+		this.set_header(header);
+		this.set_body(message);
+		this.footer.innerHTML = "";
+		const list = document.createElement("div");
+		list.className = "nav-modal-choice-list";
+		this.body.appendChild(list);
+		this.footer.appendChild(this.cancel);
+		this.show();
+		return new Promise(resolve => {
+			for (const choice of choices) {
+				const button = document.createElement("button");
+				button.type = "button";
+				button.classList.add("pf-c-button", choice.primary ? "pf-m-primary" : "pf-m-secondary");
+				button.innerText = choice.label;
+				button.title = choice.label;
+				button.onclick = () => {
+					this.hide();
+					resolve(choice.value);
+				};
+				list.appendChild(button);
+			}
+			this.cancel.onclick = () => {
+				this.hide();
+				resolve(null);
+			};
+			list.firstElementChild?.focus();
+		});
+	}
+
 	choose_row(header, columns, rows, actionLabel = "Choose") {
 		this.set_header(header);
 		this.body.innerHTML = "";
