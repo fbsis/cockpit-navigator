@@ -10,14 +10,11 @@ import { FileUploadManager } from "./FileUploadManager.js";
 export class NavDragDrop {
 	constructor(drop_area, nav_window_ref) {
 		this.drop_areas = [drop_area, document.getElementById("nav-upload-dialog")];
-		for (const area of this.drop_areas) {
-			for (const event of ["dragenter", "dragover", "dragleave", "drop"])
-				area.addEventListener(event, this, false);
-		}
 		this.nav_window_ref = nav_window_ref;
 		this.upload_manager = new FileUploadManager(nav_window_ref, 3);
 		this.file_input = this.create_input(false);
 		this.folder_input = this.create_input(true);
+		this.install_dropzones();
 		document.getElementById("nav-upload-btn").addEventListener("click", () => this.upload_manager.show());
 		document.getElementById("nav-upload-select-files").addEventListener("click", () => this.select_from_dialog(this.file_input));
 		document.getElementById("nav-upload-select-folder").addEventListener("click", () => this.select_from_dialog(this.folder_input));
@@ -50,73 +47,43 @@ export class NavDragDrop {
 		return input;
 	}
 
-	read_entries(reader) {
-		return new Promise((resolve, reject) => reader.readEntries(resolve, reject));
-	}
-
-	entry_file(entry) {
-		return new Promise((resolve, reject) => entry.file(resolve, reject));
-	}
-
-	async scan_entry(entry, parent = "") {
-		const relative_path = `${parent}${entry.name}`;
-		if (entry.isFile) {
-			try {
-				return [{ file: await this.entry_file(entry), relative_path }];
-			} catch (error) {
-				return [this.failed_item(entry.name, relative_path, error)];
-			}
-		}
-		if (!entry.isDirectory) return [];
-		let children = [];
-		try {
-			const reader = entry.createReader();
-			while (true) {
-				const batch = await this.read_entries(reader);
-				if (!batch.length) break;
-				children.push(...batch);
-			}
-		} catch (error) {
-			return [this.failed_item(entry.name, relative_path, error)];
-		}
-		const files = [];
-		for (const child of children)
-			files.push(...await this.scan_entry(child, `${relative_path}/`));
-		return files;
-	}
-
-	failed_item(name, relative_path, error) {
-		return {
-			file: new File([], name),
-			relative_path,
-			error: error?.message || String(error || "Could not read dropped item."),
-		};
-	}
-
-	async files_from_drop(data_transfer) {
-		const files = [];
-		const items = data_transfer.items;
-		for (let index = 0; index < (items?.length || 0); index++) {
-			const item = items[index];
-			const entry = item.webkitGetAsEntry?.() || item.getAsEntry?.();
-			if (entry) {
-				files.push(...await this.scan_entry(entry));
-			} else {
-				const file = item.getAsFile?.();
-				if (file) files.push({ file, relative_path: file.name });
-			}
-		}
-		const known_files = new Set(files.map(item => this.file_signature(item.file)));
-		for (let index = 0; index < (data_transfer.files?.length || 0); index++) {
-			const file = data_transfer.files.item(index);
-			if (!file || known_files.has(this.file_signature(file))) continue;
-			files.push({ file, relative_path: file.webkitRelativePath || file.name });
-		}
-		return this.deduplicate(files);
-	}
-
-	file_signature(file) {
-		return `${file.name}\0${file.size}\0${file.lastModified}\0${file.type}`;
+	install_dropzones() {
+		if (!window.Dropzone) throw new Error("Dropzone is not available.");
+		window.Dropzone.autoDiscover = false;
+		this.dropzones = this.drop_areas.map(area => {
+			const dropzone = new window.Dropzone(area, {
+				url: "/",
+				autoProcessQueue: false,
+				clickable: false,
+				createImageThumbnails: false,
+				previewsContainer: false,
+				disablePreviews: true,
+			});
+			dropzone.on("dragenter", () => area.classList.add("drag-enter"));
+			dropzone.on("dragover", () => area.classList.add("drag-enter"));
+			dropzone.on("dragleave", event => {
+				if (!area.contains(event.relatedTarget)) area.classList.remove("drag-enter");
+			});
+			dropzone.on("drop", () => {
+				for (const target of this.drop_areas) target.classList.remove("drag-enter");
+				dropzone.navigator_destination = this.nav_window_ref.pwd().path_str();
+				this.upload_manager.show();
+				this.upload_manager.set_preparing("Reading dropped items…");
+			});
+			dropzone.on("addedfiles", files => {
+				const destination = dropzone.navigator_destination || this.nav_window_ref.pwd().path_str();
+				const items = Array.from(files, file => ({
+					file,
+					relative_path: file.fullPath || file.webkitRelativePath || file.name,
+				}));
+				this.enqueue_files(items, destination).finally(() => dropzone.removeAllFiles(true));
+			});
+			dropzone.on("error", (_file, message) => {
+				this.upload_manager.set_preparing("");
+				this.nav_window_ref.modal_prompt.alert("Could not read dropped items.", String(message));
+			});
+			return dropzone;
+		});
 	}
 
 	deduplicate(files) {
@@ -189,34 +156,4 @@ export class NavDragDrop {
 		}
 	}
 
-	async handleEvent(event) {
-		const drop_area = event.currentTarget;
-		switch (event.type) {
-			case "dragenter":
-			case "dragover":
-				event.preventDefault();
-				event.stopPropagation();
-				drop_area.classList.add("drag-enter");
-				break;
-			case "dragleave":
-				event.preventDefault();
-				event.stopPropagation();
-				if (!drop_area.contains(event.relatedTarget)) drop_area.classList.remove("drag-enter");
-				break;
-			case "drop":
-				event.preventDefault();
-				event.stopPropagation();
-				for (const area of this.drop_areas) area.classList.remove("drag-enter");
-				this.upload_manager.show();
-				this.upload_manager.set_preparing("Reading dropped items…");
-				try {
-					const destination = this.nav_window_ref.pwd().path_str();
-					await this.enqueue_files(await this.files_from_drop(event.dataTransfer), destination);
-				} catch (error) {
-					this.upload_manager.set_preparing("");
-					this.nav_window_ref.modal_prompt.alert("Could not read dropped items.", error.message || String(error));
-				}
-				break;
-		}
-	}
 }
