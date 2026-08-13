@@ -9,9 +9,11 @@ import { FileUploadManager } from "./FileUploadManager.js";
 
 export class NavDragDrop {
 	constructor(drop_area, nav_window_ref) {
-		for (const event of ["dragenter", "dragover", "dragleave", "drop"])
-			drop_area.addEventListener(event, this, false);
-		this.drop_area = drop_area;
+		this.drop_areas = [drop_area, document.getElementById("nav-upload-dialog")];
+		for (const area of this.drop_areas) {
+			for (const event of ["dragenter", "dragover", "dragleave", "drop"])
+				area.addEventListener(event, this, false);
+		}
 		this.nav_window_ref = nav_window_ref;
 		this.upload_manager = new FileUploadManager(nav_window_ref, 3);
 		this.file_input = this.create_input(false);
@@ -36,10 +38,11 @@ export class NavDragDrop {
 			input.setAttribute("webkitdirectory", "");
 		}
 		input.onchange = async () => {
-			const files = [...input.files].map(file => ({
-				file,
-				relative_path: file.webkitRelativePath || file.name,
-			}));
+			const files = [];
+			for (let index = 0; index < input.files.length; index++) {
+				const file = input.files.item(index);
+				if (file) files.push({ file, relative_path: file.webkitRelativePath || file.name });
+			}
 			input.value = "";
 			await this.enqueue_files(files, this.dialog_destination);
 		};
@@ -92,7 +95,9 @@ export class NavDragDrop {
 
 	async files_from_drop(data_transfer) {
 		const files = [];
-		for (const item of [...(data_transfer.items || [])]) {
+		const items = data_transfer.items;
+		for (let index = 0; index < (items?.length || 0); index++) {
+			const item = items[index];
 			const entry = item.webkitGetAsEntry?.() || item.getAsEntry?.();
 			if (entry) {
 				files.push(...await this.scan_entry(entry));
@@ -101,11 +106,17 @@ export class NavDragDrop {
 				if (file) files.push({ file, relative_path: file.name });
 			}
 		}
-		if (!files.length) {
-			for (const file of [...data_transfer.files])
-				files.push({ file, relative_path: file.webkitRelativePath || file.name });
+		const known_files = new Set(files.map(item => this.file_signature(item.file)));
+		for (let index = 0; index < (data_transfer.files?.length || 0); index++) {
+			const file = data_transfer.files.item(index);
+			if (!file || known_files.has(this.file_signature(file))) continue;
+			files.push({ file, relative_path: file.webkitRelativePath || file.name });
 		}
 		return this.deduplicate(files);
+	}
+
+	file_signature(file) {
+		return `${file.name}\0${file.size}\0${file.lastModified}\0${file.type}`;
 	}
 
 	deduplicate(files) {
@@ -179,22 +190,23 @@ export class NavDragDrop {
 	}
 
 	async handleEvent(event) {
+		const drop_area = event.currentTarget;
 		switch (event.type) {
 			case "dragenter":
 			case "dragover":
 				event.preventDefault();
 				event.stopPropagation();
-				this.drop_area.classList.add("drag-enter");
+				drop_area.classList.add("drag-enter");
 				break;
 			case "dragleave":
 				event.preventDefault();
 				event.stopPropagation();
-				if (!this.drop_area.contains(event.relatedTarget)) this.drop_area.classList.remove("drag-enter");
+				if (!drop_area.contains(event.relatedTarget)) drop_area.classList.remove("drag-enter");
 				break;
 			case "drop":
 				event.preventDefault();
 				event.stopPropagation();
-				this.drop_area.classList.remove("drag-enter");
+				for (const area of this.drop_areas) area.classList.remove("drag-enter");
 				this.upload_manager.show();
 				this.upload_manager.set_preparing("Reading dropped items…");
 				try {

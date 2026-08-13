@@ -1118,6 +1118,11 @@ input:checked + .slider:before {
 	box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
 }
 
+.nav-upload-dialog.drag-enter {
+	border: 2px dashed var(--tab-active-border);
+	box-shadow: 0 0 0 4px rgba(0, 102, 204, 0.15), 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+
 .nav-upload-header,
 .nav-upload-footer,
 .nav-upload-picker-actions,
