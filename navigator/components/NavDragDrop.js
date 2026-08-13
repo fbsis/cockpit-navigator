@@ -54,6 +54,7 @@ export class NavDragDrop {
 			const dropzone = new window.Dropzone(area, {
 				url: "/",
 				autoProcessQueue: false,
+				maxFilesize: 10 * 1024,
 				clickable: false,
 				createImageThumbnails: false,
 				previewsContainer: false,
