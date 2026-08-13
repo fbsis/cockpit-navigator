@@ -21,6 +21,8 @@ export class FileUploadManager {
 		this.summary = document.getElementById("nav-upload-summary");
 		this.destination = document.getElementById("nav-upload-destination");
 		this.total_progress = document.getElementById("nav-upload-total-progress");
+		this.details_panel = document.getElementById("nav-upload-details-panel");
+		this.details_toggle = document.getElementById("nav-upload-details-toggle");
 		this.compact = document.getElementById("nav-upload-compact");
 		this.compact_text = document.getElementById("nav-upload-compact-text");
 		this.clear_button = document.getElementById("nav-upload-clear");
@@ -29,9 +31,18 @@ export class FileUploadManager {
 		this.cancel_all_button.onclick = () => this.cancel_all();
 		this.clear_button.onclick = () => this.clear_finished();
 		this.compact.onclick = () => this.show();
+		this.details_toggle.onclick = () => this.set_details(this.details_panel.hidden);
+		this.summary.onclick = () => this.set_details(this.details_panel.hidden);
+		this.summary.onkeydown = event => {
+			if (["Enter", " "].includes(event.key)) {
+				event.preventDefault();
+				this.set_details(this.details_panel.hidden);
+			}
+		};
 		window.addEventListener("keydown", event => {
 			if (event.key === "Escape" && this.modal.style.display === "flex") this.hide();
 		});
+		this.set_details(false);
 		this.update_totals();
 	}
 
@@ -43,6 +54,15 @@ export class FileUploadManager {
 	set_preparing(message = "") {
 		this.preparing = message;
 		this.update_totals();
+	}
+
+	set_details(visible) {
+		this.details_panel.hidden = !visible;
+		this.modal.querySelector(".nav-upload-dialog").classList.toggle("nav-upload-summary-only", !visible);
+		this.details_toggle.setAttribute("aria-expanded", String(visible));
+		this.details_toggle.innerHTML = visible
+			? '<i class="fas fa-chevron-up"></i> Hide details'
+			: '<i class="fas fa-chevron-down"></i> Show details';
 	}
 
 	hide() {
@@ -219,6 +239,8 @@ export class FileUploadManager {
 		const counts = Object.fromEntries([...FINAL_STATES].map(state => [state, batch.uploads.filter(item => item.state === state).length]));
 		this.refresh_destination(batch.destination);
 		this.show_final_alert(batch, counts);
+		if (this.all_uploads().every(upload => FINAL_STATES.has(upload.state)))
+			this.set_details(false);
 	}
 
 	refresh_destination(destination) {

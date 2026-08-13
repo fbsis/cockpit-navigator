@@ -1123,6 +1123,18 @@ input:checked + .slider:before {
 	box-shadow: 0 0 0 4px rgba(0, 102, 204, 0.15), 0 8px 30px rgba(0, 0, 0, 0.4);
 }
 
+.nav-upload-dialog.nav-upload-summary-only {
+	width: min(560px, 96vw);
+}
+
+.nav-upload-details-panel[hidden] {
+	display: none;
+}
+
+.nav-upload-details-toggle {
+	margin-left: auto;
+}
+
 .nav-upload-header,
 .nav-upload-footer,
 .nav-upload-picker-actions,
@@ -1141,6 +1153,17 @@ input:checked + .slider:before {
 
 .nav-upload-header h2 {
 	margin: 0 0 0.2rem;
+}
+
+.nav-upload-summary {
+	cursor: pointer;
+	text-decoration: underline dotted;
+	text-underline-offset: 0.2rem;
+}
+
+.nav-upload-summary:focus-visible {
+	outline: 2px solid var(--tab-active-border);
+	outline-offset: 2px;
 }
 
 .nav-upload-destination {
