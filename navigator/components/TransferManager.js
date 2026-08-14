@@ -113,6 +113,11 @@ export class TransferManager {
 			parts.current.textContent = "Queued";
 			parts.rate.textContent = "-";
 			parts.eta.textContent = "-";
+		} else if (event.event === "started") {
+			parts.current.textContent = "Starting transfer…";
+			parts.current.title = `${operation.source_root} → ${operation.destination}`;
+			parts.rate.textContent = "-";
+			parts.eta.textContent = "-";
 		} else if (event.event === "progress") {
 			parts.current.textContent = event.file || "Transferring…";
 			parts.current.title = event.file || "";
@@ -179,6 +184,7 @@ export class TransferManager {
 			return;
 		const operation = this.active = this.queue.shift();
 		operation.state = "running";
+		this.update_card(operation, { event: "started" });
 		const cmd = ["/usr/share/cockpit/navigator/scripts/paste.py3"];
 		if (operation.type === "move") cmd.push("--move");
 		cmd.push(operation.source_root, ...operation.sources, operation.destination);
