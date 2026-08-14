@@ -33,7 +33,7 @@ I created and maintain the following improvements in this fork. My goal is to tr
 * **Visual multi-file and folder uploads** with a three-item queue, per-file and total progress, safe cancellation, retries, conflict handling, and final batch notifications.
 * **Image preview gallery** powered by PhotoSwipe, with zoom, keyboard and gesture navigation, and previous/next navigation based on the currently visible file list.
 * **Thumbnail gallery mode** with ImageMagick thumbnails for images and FFmpeg thumbnails for videos, cached under the system temporary directory with a graceful icon fallback.
-* **Progressive video playback** through FFmpeg and the browser's native video controls, with the existing local-file preview as a fallback.
+* **Video preview** using the browser's native controls, limited to the first 200 MB for large files.
 * **ZFS snapshot history and restore** for individual files and folders, with cached filesystem detection, safe merge restoration, and automatic preservation of replaced content.
 
 | Browsing Filesystem |
@@ -70,7 +70,7 @@ The source checkout remains in `/usr/share/cockpit/cockpit-navigator`. The `make
 
 ### Optional gallery dependencies
 
-Gallery thumbnails and progressive video playback use ImageMagick and FFmpeg. Navigator continues to work with regular file icons and its existing video preview when these optional packages are unavailable.
+Gallery thumbnails use ImageMagick for images and FFmpeg for videos. Navigator continues to work with regular file icons when these optional packages are unavailable.
 
 Ubuntu/Debian:
 
