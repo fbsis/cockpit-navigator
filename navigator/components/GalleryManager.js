@@ -6,8 +6,12 @@ export class GalleryManager {
 		this.nav_window_ref = nav_window_ref;
 		this.generation = 0;
 		this.urls = new Set();
+		this.thumbnail_entries = new Set();
 		this.missing = new Set();
 		this.notice_signature = "";
+		this.queue = [];
+		this.active = 0;
+		this.max_concurrent = 4;
 	}
 
 	extension(entry) {
@@ -23,26 +27,63 @@ export class GalleryManager {
 
 	stop() {
 		this.generation++;
+		this.observer?.disconnect();
+		this.observer = null;
+		this.queue = [];
+		for (const entry of this.thumbnail_entries) {
+			const icon = entry.dom_element?.nav_item_icon;
+			icon?.classList.remove("nav-gallery-has-thumbnail");
+			icon?.querySelectorAll(".nav-gallery-thumbnail, .nav-gallery-video-badge").forEach(element => element.remove());
+		}
+		this.thumbnail_entries.clear();
 		for (const url of this.urls) URL.revokeObjectURL(url);
 		this.urls.clear();
 	}
 
-	async render(entries) {
+	render(entries) {
 		this.stop();
 		const generation = this.generation;
 		this.missing.clear();
 		const media = entries.filter(entry => this.media_type(entry) && entry.visible);
-		await Promise.all(Array.from({ length: Math.min(4, media.length) }, async (_, worker) => {
-			for (let index = worker; index < media.length; index += 4)
-				await this.render_entry(media[index], generation);
-		}));
-		if (generation === this.generation) this.show_dependency_notice();
+		for (const entry of media) {
+			entry.dom_element.classList.add("nav-gallery-media");
+			entry.dom_element.nav_item_icon.classList.add("nav-gallery-placeholder");
+		}
+		if (!("IntersectionObserver" in window)) {
+			this.queue.push(...media.map(entry => ({ entry, generation })));
+			this.drain_queue();
+			return;
+		}
+		this.observer = new IntersectionObserver(records => {
+			for (const record of records) {
+				if (!record.isIntersecting) continue;
+				this.observer?.unobserve(record.target);
+				const entry = record.target._nav_gallery_entry;
+				if (entry) this.queue.push({ entry, generation });
+			}
+			this.drain_queue();
+		}, { root: this.nav_window_ref.window, rootMargin: "200px 0px", threshold: 0.01 });
+		for (const entry of media) {
+			entry.dom_element._nav_gallery_entry = entry;
+			this.observer.observe(entry.dom_element);
+		}
+	}
+
+	drain_queue() {
+		while (this.active < this.max_concurrent && this.queue.length) {
+			const { entry, generation } = this.queue.shift();
+			if (generation !== this.generation) continue;
+			this.active++;
+			this.render_entry(entry, generation).finally(() => {
+				this.active--;
+				if (generation === this.generation) this.show_dependency_notice();
+				this.drain_queue();
+			});
+		}
 	}
 
 	async render_entry(entry, generation) {
 		const type = this.media_type(entry);
-		entry.dom_element.classList.add("nav-gallery-media");
-		entry.dom_element.nav_item_icon.classList.add("nav-gallery-placeholder");
 		try {
 			const output = await cockpit.spawn(
 				["/usr/share/cockpit/navigator/scripts/media-thumbnail.py3", type, entry.path_str()],
@@ -63,11 +104,15 @@ export class GalleryManager {
 			image.className = "nav-gallery-thumbnail";
 			image.alt = "";
 			image.src = url;
-			entry.dom_element.nav_item_icon.replaceChildren(image);
+			const icon = entry.dom_element.nav_item_icon;
+			icon.querySelectorAll(".nav-gallery-thumbnail, .nav-gallery-video-badge").forEach(element => element.remove());
+			icon.classList.add("nav-gallery-has-thumbnail");
+			icon.appendChild(image);
+			this.thumbnail_entries.add(entry);
 			if (type === "video") {
 				const badge = document.createElement("i");
 				badge.className = "fas fa-play nav-gallery-video-badge";
-				entry.dom_element.nav_item_icon.appendChild(badge);
+				icon.appendChild(badge);
 			}
 		} catch (error) {
 			console.warn(`Could not create thumbnail for ${entry.path_str()}`, error);

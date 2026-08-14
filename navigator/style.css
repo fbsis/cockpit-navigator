@@ -613,10 +613,6 @@ input[type="text"] {
 	padding: 0.75rem;
 }
 
-.contents-view-gallery > .contents-view-list-header {
-	display: none;
-}
-
 .contents-view-gallery > .nav-item {
 	display: flex;
 	min-width: 0;
@@ -655,11 +651,19 @@ input[type="text"] {
 	border-color: var(--tab-active-border);
 }
 
+.contents-view-gallery > .contents-view-list-header {
+	display: none !important;
+}
+
 .nav-gallery-thumbnail {
 	display: block;
 	width: 100%;
 	height: 100%;
 	object-fit: contain;
+}
+
+.nav-gallery-has-thumbnail::before {
+	display: none;
 }
 
 .nav-gallery-video-badge {
