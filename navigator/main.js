@@ -42,12 +42,15 @@ function load_hidden_file_state(nav_window) {
  * 
  * @param {NavWindow} nav_window 
  */
- function load_item_display_state(nav_window) {
+function load_item_display_state(nav_window) {
 	const state = localStorage.getItem('item-display');
-
-	if (state === 'list') {
-		nav_window.switch_item_display();
-	}
+	if (!['grid', 'list', 'gallery'].includes(state)) return;
+	nav_window.item_display = state;
+	nav_window.window.classList.remove('contents-view-grid', 'contents-view-list', 'contents-view-gallery');
+	nav_window.window.classList.add(`contents-view-${state}`);
+	const icon = document.getElementById('nav-item-display-icon');
+	icon.classList.remove('fa-list', 'fa-th', 'fa-images');
+	icon.classList.add(state === 'grid' ? 'fa-list' : state === 'list' ? 'fa-th' : 'fa-images');
 }
 
 function set_last_theme_state() {

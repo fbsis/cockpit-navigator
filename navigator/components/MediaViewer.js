@@ -15,6 +15,11 @@ export class MediaViewer {
 		this.build_video_modal();
 	}
 
+	ffmpeg_available() {
+		return cockpit.spawn(["which", "ffmpeg"], { err: "ignore" })
+			.then(() => true, () => false);
+	}
+
 	extension(entry) {
 		const name = entry?.filename || "";
 		return name.includes(".") ? name.split(".").pop().toLowerCase() : "";
@@ -266,6 +271,15 @@ export class MediaViewer {
 		try {
 			if (!this.video_modal.hidden)
 				this.close_video();
+			if (window.MediaSource && await this.ffmpeg_available()) {
+				try {
+					await this.open_streamed_video(entry);
+					return;
+				} catch (error) {
+					console.warn("FFmpeg streaming unavailable; using the regular preview.", error);
+					this.close_video();
+				}
+			}
 			const { url, partial } = await this.read_video_preview(entry, mime);
 			this.video.src = url;
 			this.video_title.textContent = partial ? `${entry.filename} — first 200 MB` : entry.filename;
@@ -280,7 +294,60 @@ export class MediaViewer {
 		}
 	}
 
+	async open_streamed_video(entry) {
+		const mime = 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"';
+		if (!MediaSource.isTypeSupported(mime))
+			throw new Error("This browser does not support the FFmpeg streaming format.");
+		const media_source = new MediaSource();
+		this.media_source = media_source;
+		const url = URL.createObjectURL(media_source);
+		this.object_urls.add(url);
+		this.video.src = url;
+		this.video_title.textContent = `${entry.filename} — streaming`;
+		this.video_download.hidden = true;
+		this.video_modal.hidden = false;
+		await new Promise((resolve, reject) => {
+			media_source.addEventListener("sourceopen", resolve, { once: true });
+			media_source.addEventListener("error", () => reject(new Error("Could not initialize video streaming.")), { once: true });
+		});
+		const source = media_source.addSourceBuffer(mime);
+		const chunks = [];
+		let finished = false;
+		const append_next = () => {
+			if (source.updating || !chunks.length) {
+				if (finished && !source.updating && !chunks.length && media_source.readyState === "open")
+					media_source.endOfStream();
+				return;
+			}
+			source.appendBuffer(chunks.shift());
+		};
+		source.addEventListener("updateend", append_next);
+		this.video_process = cockpit.spawn([
+			"ffmpeg", "-v", "error", "-re", "-i", this.path_for(entry),
+			"-map", "0:v:0", "-map", "0:a:0?", "-c:v", "libx264", "-preset", "veryfast",
+			"-profile:v", "baseline", "-level", "3.0", "-pix_fmt", "yuv420p",
+			"-c:a", "aac", "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+			"-f", "mp4", "pipe:1",
+		], { binary: true, superuser: "try", err: "message" });
+		this.video_process.stream(data => {
+			chunks.push(data instanceof Uint8Array ? data : new Uint8Array(data));
+			append_next();
+		});
+		this.video_process.then(() => {
+			finished = true;
+			append_next();
+		}, error => {
+			if (!this.video_modal.hidden)
+				this.nav_window_ref.modal_prompt.alert("Video streaming stopped.", error.message || String(error));
+		});
+		await this.video.play().catch(() => {});
+	}
+
 	close_video() {
+		if (this.video_process) {
+			this.video_process.close("cancelled");
+			this.video_process = null;
+		}
 		this.video.pause();
 		this.video.removeAttribute("src");
 		this.video.load();

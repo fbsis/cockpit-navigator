@@ -32,7 +32,8 @@ I created and maintain the following improvements in this fork. My goal is to tr
 * **Copy and move between open directory tabs** using the clipboard button or context menu.
 * **Visual multi-file and folder uploads** with a three-item queue, per-file and total progress, safe cancellation, retries, conflict handling, and final batch notifications.
 * **Image preview gallery** powered by PhotoSwipe, with zoom, keyboard and gesture navigation, and previous/next navigation based on the currently visible file list.
-* **Video preview** using the browser's native video controls, with offline local-file loading and download fallback.
+* **Thumbnail gallery mode** with ImageMagick thumbnails for images and FFmpeg thumbnails for videos, cached under the system temporary directory with a graceful icon fallback.
+* **Progressive video playback** through FFmpeg and the browser's native video controls, with the existing local-file preview as a fallback.
 * **ZFS snapshot history and restore** for individual files and folders, with cached filesystem detection, safe merge restoration, and automatic preservation of replaced content.
 
 | Browsing Filesystem |
@@ -66,6 +67,24 @@ cd /usr/share/cockpit/cockpit-navigator && sudo git pull && sudo make install &&
 ```
 
 The source checkout remains in `/usr/share/cockpit/cockpit-navigator`. The `make install` command publishes its `navigator/` package to `/usr/share/cockpit/navigator`, which is the runtime path expected by the plugin's internal scripts.
+
+### Optional gallery dependencies
+
+Gallery thumbnails and progressive video playback use ImageMagick and FFmpeg. Navigator continues to work with regular file icons and its existing video preview when these optional packages are unavailable.
+
+Ubuntu/Debian:
+
+```bash
+sudo apt install imagemagick ffmpeg
+```
+
+Rocky Linux/RHEL (with repositories that provide these packages enabled):
+
+```bash
+sudo dnf install ImageMagick ffmpeg
+```
+
+Generated thumbnails are cached in `${TMPDIR:-/tmp}/cockpit-navigator/thumbnails` and never written next to the original media files.
 
 ## First installation of this fork
 

@@ -25,6 +25,7 @@ import { SortFunctions } from "./SortFunctions.js";
 import { ModalPrompt } from "./ModalPrompt.js";
 import { TransferManager } from "./TransferManager.js";
 import { MediaViewer } from "./MediaViewer.js";
+import { GalleryManager } from "./GalleryManager.js";
 import { DirectorySizeManager } from "./DirectorySizeManager.js";
 import { ZfsSnapshotManager } from "./ZfsSnapshotManager.js";
 import { format_bytes, format_permissions } from "../functions.js";
@@ -54,6 +55,7 @@ export class NavWindow {
 		this.modal_prompt = new ModalPrompt();
 		this.transfer_manager = new TransferManager(this);
 		this.media_viewer = new MediaViewer(this);
+		this.gallery_manager = new GalleryManager(this);
 		this.directory_size_manager = new DirectorySizeManager(this);
 		this.zfs_snapshot_manager = new ZfsSnapshotManager(this);
 
@@ -139,6 +141,7 @@ export class NavWindow {
 
 	async refresh() {
 		this.directory_size_manager.cancel();
+		this.gallery_manager.stop();
 		localStorage.setItem('navigator-path', `/${this.path_stack[this.path_stack_index].path.join('/')}`);
 
 		var num_dirs = 0;
@@ -888,20 +891,24 @@ export class NavWindow {
 		var button = document.getElementById("nav-item-display-icon");
 		if (this.item_display === "grid") {
 			this.item_display = "list";
-			await this.refresh();
-			this.window.classList.remove("contents-view-grid");
+			this.window.classList.remove("contents-view-grid", "contents-view-gallery");
 			this.window.classList.add("contents-view-list");
-			button.classList.remove("fa-list");
+			button.classList.remove("fa-list", "fa-th", "fa-images");
 			button.classList.add("fa-th");
+		} else if (this.item_display === "list") {
+			this.item_display = "gallery";
+			this.window.classList.remove("contents-view-list", "contents-view-grid");
+			this.window.classList.add("contents-view-gallery");
+			button.classList.remove("fa-list", "fa-th", "fa-images");
+			button.classList.add("fa-images");
 		} else {
 			this.item_display = "grid";
-			await this.refresh();
-			this.window.classList.remove("contents-view-list");
+			this.window.classList.remove("contents-view-list", "contents-view-gallery");
 			this.window.classList.add("contents-view-grid");
-			button.classList.remove("fa-th");
+			button.classList.remove("fa-list", "fa-th", "fa-images");
 			button.classList.add("fa-list");
 		}
-		
+		await this.refresh();
 		localStorage.setItem("item-display", this.item_display);
 	}
 
@@ -922,6 +929,7 @@ export class NavWindow {
 			else
 				entry.hide();
 		});
+		if (this.item_display === "gallery") this.gallery_manager.render(this.entries);
 	}
 
 	/**
