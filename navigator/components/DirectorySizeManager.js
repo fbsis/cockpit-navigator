@@ -21,6 +21,7 @@ export class DirectorySizeManager {
 
 	start(entries, timeout = 10, method = "incremental", force = false) {
 		this.cancel();
+		if (this.nav_window_ref.item_display !== "list") return;
 		const directories = entries.filter(entry => entry.nav_type === "dir" && entry.visible);
 		if (!directories.length) return;
 		if (this.nav_window_ref.pwd().path_str() === "/" && !force) {
@@ -60,12 +61,13 @@ export class DirectorySizeManager {
 
 	render(entry, bytes, state) {
 		if (bytes !== null) entry.stat.size = bytes;
-		let element = entry.dom_element.nav_item_size;
+		let element = entry.dom_element.nav_item_size || entry.dom_element.querySelector(".nav-dir-size-badge");
 		if (!element) {
 			element = document.createElement("div");
 			element.className = "nav-dir-size-badge";
 			entry.dom_element.appendChild(element);
 		}
+		entry.dom_element.nav_item_size = element;
 		const icon = state === "timeout"
 			? '<i class="fas fa-hourglass-end nav-dir-size-timeout"></i> '
 			: state === "root-deferred" ? '<i class="fas fa-hourglass-half nav-dir-size-timeout"></i> '

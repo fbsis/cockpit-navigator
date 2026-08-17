@@ -192,7 +192,7 @@ export class NavWindow {
 		this.stop_load();
 		this.set_nav_button_state();
 		this.apply_search_filter(document.getElementById("search-bar").value);
-		this.directory_size_manager.start(this.entries);
+		if (this.item_display === "list") this.directory_size_manager.start(this.entries);
 	}
 
 	set_nav_button_state() {
@@ -914,7 +914,10 @@ export class NavWindow {
 
 	search_filter(event) {
 		this.apply_search_filter(event.target.value);
-		this.directory_size_manager.start(this.entries);
+		if (this.item_display === "list")
+			this.directory_size_manager.start(this.entries);
+		else
+			this.directory_size_manager.cancel();
 	}
 
 	apply_search_filter(search_name = "") {
