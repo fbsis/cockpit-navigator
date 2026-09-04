@@ -90,28 +90,8 @@ export class BackupManager {
 					: "Not run yet";
 				const row = document.createElement("tr");
 				row.innerHTML = `<td>${this.escape(job.name)}</td><td>${job.mode === "snapshot" ? "ZFS snapshot" : "rsync copy"}</td><td>${job.enabled ? this.escape(this.on_calendar(job)) : "Paused"}</td><td>${this.escape(last)}</td>`;
-				const action = document.createElement("button");
-				action.type = "button";
-				action.className = "pf-c-button pf-m-secondary";
-				action.textContent = "Open";
-				action.onclick = () => this.wizard(job);
-				const run = document.createElement("button");
-				run.type = "button";
-				run.className = "pf-c-button pf-m-primary";
-				run.textContent = "Run now";
-				run.onclick = () => this.run_now(job);
-				const logs = document.createElement("button");
-				logs.type = "button";
-				logs.className = "pf-c-button pf-m-secondary";
-				logs.textContent = "Logs";
-				logs.onclick = () => this.show_logs(job);
-				const remove = document.createElement("button");
-				remove.type = "button";
-				remove.className = "pf-c-button pf-m-danger";
-				remove.textContent = "Delete";
-				remove.onclick = () => this.remove(job);
 				const cell = document.createElement("td");
-				cell.append(action, run, logs, remove);
+				cell.appendChild(this.action_menu(job));
 				row.appendChild(cell);
 				body.appendChild(row);
 			}
@@ -124,6 +104,46 @@ export class BackupManager {
 		close.textContent = "Close";
 		close.onclick = () => modal.hide();
 		modal.footer.appendChild(close);
+	}
+
+	action_menu(job) {
+		const holder = document.createElement("div");
+		holder.className = "nav-backup-actions";
+		const toggle = document.createElement("button");
+		toggle.type = "button";
+		toggle.className = "pf-c-button pf-m-secondary";
+		toggle.title = `Actions for ${job.name}`;
+		toggle.setAttribute("aria-label", `Actions for ${job.name}`);
+		toggle.setAttribute("aria-expanded", "false");
+		toggle.innerHTML = '<i class="fas fa-bars"></i>';
+		const menu = document.createElement("div");
+		menu.className = "nav-backup-action-menu";
+		const actions = [
+			["Open", "pf-m-secondary", () => this.wizard(job)],
+			["Run now", "pf-m-primary", () => this.run_now(job)],
+			["Logs", "pf-m-secondary", () => this.show_logs(job)],
+			["Delete", "pf-m-danger", () => this.remove(job)],
+		];
+		for (const [label, style, handler] of actions) {
+			const button = document.createElement("button");
+			button.type = "button";
+			button.className = `pf-c-button ${style}`;
+			button.textContent = label;
+			button.onclick = handler;
+			menu.appendChild(button);
+		}
+		toggle.onclick = event => {
+			event.stopPropagation();
+			const open = menu.classList.toggle("nav-backup-action-menu-open");
+			toggle.setAttribute("aria-expanded", String(open));
+		};
+		holder.addEventListener("click", event => event.stopPropagation());
+		document.addEventListener("click", () => {
+			menu.classList.remove("nav-backup-action-menu-open");
+			toggle.setAttribute("aria-expanded", "false");
+		}, { once: true });
+		holder.append(toggle, menu);
+		return holder;
 	}
 
 	async run_now(job) {
