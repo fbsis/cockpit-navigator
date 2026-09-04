@@ -132,6 +132,13 @@ def sync_systemd():
             subprocess.run(["systemctl", "disable", "--now", timer.name], capture_output=True)
             timer.unlink()
             (UNIT_DIRECTORY / unit_name(job_id, "service")).unlink(missing_ok=True)
+            log_path(job_id).unlink(missing_ok=True)
+    for service in UNIT_DIRECTORY.glob("cockpit-navigator-backup@*.service"):
+        job_id = service.name[len("cockpit-navigator-backup@"): -len(".service")]
+        if job_id not in job_ids:
+            subprocess.run(["systemctl", "stop", service.name], capture_output=True)
+            service.unlink()
+            log_path(job_id).unlink(missing_ok=True)
     subprocess.run(["systemctl", "daemon-reload"], check=True, capture_output=True)
     enabled = 0
     for job in jobs:
@@ -160,6 +167,13 @@ def log_path(job_id):
 def write_log(job_id, message):
     with log_path(job_id).open("a", encoding="utf-8") as log_file:
         log_file.write(f"{datetime.datetime.now().astimezone().isoformat(timespec='seconds')} {message}\n")
+
+
+def write_process_output(job_id, output):
+    if not output:
+        return
+    for line in output.decode(errors="replace").splitlines():
+        write_log(job_id, f"rsync: {line}")
 
 
 def snapshot_metrics(dataset, job_id, retention):
@@ -236,9 +250,10 @@ def run_job(job_id):
                 snapshots["removed"] += result["removed"]
             if destination:
                 rsync = subprocess.run(
-                    ["rsync", "-aHAX", "--numeric-ids", "--stats", source.rstrip("/") + "/", destination.rstrip("/") + "/"],
+                    ["rsync", "-aHAX", "--numeric-ids", "--stats", "--itemize-changes", source.rstrip("/") + "/", destination.rstrip("/") + "/"],
                     check=True, capture_output=True,
                 )
+                write_process_output(job_id, rsync.stdout)
                 metrics = rsync_metrics(rsync.stdout.decode())
             else:
                 metrics = {}
@@ -253,6 +268,8 @@ def run_job(job_id):
             return {"source": source, "destination": destination, "mode": job.get("mode", "rsync")}
         except Exception as error:
             job["lastRun"] = {"status": "error", "at": started.isoformat(), "error": str(error)}
+            write_process_output(job_id, getattr(error, "stdout", b"") or b"")
+            write_process_output(job_id, getattr(error, "stderr", b"") or b"")
             write_log(job_id, f"Failed: {error}")
             save_config(config)
             raise
@@ -278,7 +295,11 @@ def main():
         elif arguments.action == "logs":
             path = log_path(arguments.job_id)
             lines = path.read_text(encoding="utf-8").splitlines()[-50:] if path.exists() else []
-            result = {"lines": lines}
+            journal = subprocess.run(
+                ["journalctl", "--no-pager", "--output=short-iso", "--lines=50", "--unit", unit_name(arguments.job_id, "service")],
+                text=True, capture_output=True,
+            )
+            result = {"lines": lines, "journal": journal.stdout.splitlines()[-50:]}
         else:
             result = run_job(arguments.job_id)
         print(json.dumps({"ok": True, **result}))

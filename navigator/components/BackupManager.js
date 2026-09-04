@@ -100,8 +100,18 @@ export class BackupManager {
 				run.className = "pf-c-button pf-m-primary";
 				run.textContent = "Run now";
 				run.onclick = () => this.run_now(job);
+				const logs = document.createElement("button");
+				logs.type = "button";
+				logs.className = "pf-c-button pf-m-secondary";
+				logs.textContent = "Logs";
+				logs.onclick = () => this.show_logs(job);
+				const remove = document.createElement("button");
+				remove.type = "button";
+				remove.className = "pf-c-button pf-m-danger";
+				remove.textContent = "Delete";
+				remove.onclick = () => this.remove(job);
 				const cell = document.createElement("td");
-				cell.append(action, run);
+				cell.append(action, run, logs, remove);
 				row.appendChild(cell);
 				body.appendChild(row);
 			}
@@ -125,6 +135,43 @@ export class BackupManager {
 			await this.show(`Could not run ${job.name}: ${error.message || String(error)}`, true);
 		} finally {
 			this.nav_window_ref.stop_load();
+		}
+	}
+
+	async show_logs(job) {
+		const modal = this.open_modal(`Logs: ${job.name}`);
+		const result = await this.run("logs", job.id).catch(error => ({ lines: [`Could not load logs: ${error.message || String(error)}`], journal: [] }));
+		for (const [title, lines] of [["rsync job log", result.lines], ["systemd service journal", result.journal]]) {
+			const heading = document.createElement("h3");
+			heading.textContent = title;
+			const log = document.createElement("pre");
+			log.className = "nav-backup-log";
+			log.textContent = lines.join("\n") || "No entries yet.";
+			modal.body.append(heading, log);
+		}
+		const close = document.createElement("button");
+		close.type = "button";
+		close.className = "pf-c-button pf-m-secondary";
+		close.textContent = "Close";
+		close.onclick = () => this.show();
+		modal.footer.appendChild(close);
+	}
+
+	async remove(job) {
+		const confirmed = await this.nav_window_ref.modal_prompt.confirm(
+			`Delete ${job.name}?`,
+			"The schedule, timer, service, and Navigator job log will be removed.",
+			true,
+		);
+		if (!confirmed) return this.show();
+		try {
+			const backups = await this.config_store.section("backups", { jobs: [] });
+			backups.jobs = (Array.isArray(backups.jobs) ? backups.jobs : []).filter(item => item?.id !== job.id);
+			await this.wait_for(this.config_store.save(), "Saving Navigator settings");
+			await this.wait_for(this.sync_systemd(), "Updating systemd timers");
+			await this.show(`Deleted ${job.name}.`);
+		} catch (error) {
+			await this.show(`Could not delete ${job.name}: ${error.message || String(error)}`, true);
 		}
 	}
 
@@ -257,14 +304,19 @@ export class BackupManager {
 	async render_summary(body, draft) {
 		const type = draft.mode === "snapshot" ? "ZFS snapshot" : "rsync copy";
 		body.innerHTML += `<h3>Summary</h3><dl class="nav-backup-summary"><dt>Type</dt><dd>${type}</dd><dt>Source</dt><dd>${this.escape(draft.source)}</dd>${draft.mode === "rsync" ? `<dt>Destination</dt><dd>${this.escape(draft.destination)}</dd>` : ""}<dt>Schedule</dt><dd>${draft.enabled ? this.escape(draft.onCalendar) : "Paused"}</dd><dt>Snapshot retention</dt><dd>${draft.snapshotRetention || "Unlimited"}</dd></dl>`;
-		if (!draft.lastRun) return;
-		const run = draft.lastRun;
-		body.innerHTML += `<h3>Latest execution</h3><dl class="nav-backup-summary"><dt>Status</dt><dd>${this.escape(run.status)}</dd><dt>Started</dt><dd>${this.escape(new Date(run.at).toLocaleString())}</dd><dt>Duration</dt><dd>${run.durationSeconds ?? "-"} seconds</dd><dt>Files</dt><dd>${this.escape(run.metrics?.files || "-")}</dd><dt>Transferred</dt><dd>${this.escape(run.metrics?.transferred || "-")}</dd><dt>Snapshots kept</dt><dd>${run.metrics?.snapshots ?? "-"}</dd></dl>`;
-		const logs = await this.run("logs", draft.id).catch(() => ({ lines: [] }));
-		const log = document.createElement("pre");
-		log.className = "nav-backup-log";
-		log.textContent = logs.lines.join("\n") || "No log entries yet.";
-		body.appendChild(log);
+		if (draft.lastRun) {
+			const run = draft.lastRun;
+			body.innerHTML += `<h3>Latest execution</h3><dl class="nav-backup-summary"><dt>Status</dt><dd>${this.escape(run.status)}</dd><dt>Started</dt><dd>${this.escape(new Date(run.at).toLocaleString())}</dd><dt>Duration</dt><dd>${run.durationSeconds ?? "-"} seconds</dd><dt>Files</dt><dd>${this.escape(run.metrics?.files || "-")}</dd><dt>Transferred</dt><dd>${this.escape(run.metrics?.transferred || "-")}</dd><dt>Snapshots kept</dt><dd>${run.metrics?.snapshots ?? "-"}</dd></dl>`;
+		}
+		const logs = await this.run("logs", draft.id).catch(() => ({ lines: [], journal: [] }));
+		for (const [title, lines] of [["rsync job log", logs.lines], ["systemd service journal", logs.journal]]) {
+			const heading = document.createElement("h3");
+			heading.textContent = title;
+			const log = document.createElement("pre");
+			log.className = "nav-backup-log";
+			log.textContent = lines.join("\n") || "No entries yet.";
+			body.append(heading, log);
+		}
 	}
 
 	read_step(body, draft, step) {
