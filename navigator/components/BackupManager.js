@@ -162,7 +162,11 @@ export class BackupManager {
 			next.onclick = async () => {
 				if (!this.read_step(modal.body, draft, step)) return;
 				if (step < 3) { step++; await render(); }
-				else await this.save(draft, job);
+				else {
+					next.disabled = true;
+					next.textContent = "Saving...";
+					await this.save(draft);
+				}
 			};
 			modal.footer.appendChild(next);
 		};
@@ -274,23 +278,21 @@ export class BackupManager {
 	}
 
 	async save(draft) {
-		if (draft.mode === "snapshot" && !draft.snapshotSource) {
-			await this.nav_window_ref.modal_prompt.alert("Snapshot unavailable", "The source must be on ZFS for a snapshot-only job.");
-			return;
-		}
-		const jobs = await this.jobs();
-		const index = jobs.findIndex(job => job.id === draft.id);
-		if (index === -1) jobs.push(draft);
-		else jobs[index] = draft;
 		try {
+			if (draft.mode === "snapshot" && !draft.snapshotSource)
+				throw new Error("The source must be on ZFS for a snapshot-only job.");
+			const jobs = await this.jobs();
+			const index = jobs.findIndex(job => job.id === draft.id);
+			if (index === -1) jobs.push(draft);
+			else jobs[index] = draft;
 			await this.config_store.save();
 		} catch (error) {
-			await this.nav_window_ref.modal_prompt.alert("Could not save schedule", error.message || String(error));
+			await this.show(`Could not save schedule: ${error.message || String(error)}`, true);
 			return;
 		}
 		try {
 			await this.sync_cron();
-			await this.show("Schedule saved and added to the current user's crontab.");
+			this.nav_window_ref.modal_prompt.hide();
 		} catch (error) {
 			await this.show(`Schedule saved, but cron was not updated: ${error.message || String(error)}`, true);
 		}
