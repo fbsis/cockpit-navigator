@@ -360,6 +360,18 @@ input[type="text"] {
 	opacity: 0.65;
 }
 
+.nav-backup-notice {
+	padding: 0.75rem;
+	border: 1px solid #3e8635;
+	border-radius: 4px;
+	background: rgba(62, 134, 53, 0.12);
+}
+
+.nav-backup-notice-error {
+	border-color: #c9190b;
+	background: rgba(201, 25, 11, 0.12);
+}
+
 .nav-backup-summary {
 	display: grid;
 	grid-template-columns: max-content minmax(0, 1fr);
@@ -382,6 +394,11 @@ input[type="text"] {
 	background: var(--navigation);
 	border: 1px solid var(--border);
 	white-space: pre-wrap;
+}
+
+.nav-backup-table td:last-child {
+	display: flex;
+	gap: 0.5rem;
 }
 
 .nav-modal-choice-list {

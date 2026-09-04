@@ -44,11 +44,17 @@ export class BackupManager {
 		return modal;
 	}
 
-	async show() {
+	async show(notice = "", error = false) {
 		const modal = this.open_modal("Backup schedules");
 		const jobs = await this.jobs();
 		const intro = document.createElement("p");
 		intro.textContent = "Scheduled rsync copies and ZFS snapshots run as the current user.";
+		if (notice) {
+			const message = document.createElement("p");
+			message.className = error ? "nav-backup-notice nav-backup-notice-error" : "nav-backup-notice";
+			message.textContent = notice;
+			modal.body.appendChild(message);
+		}
 		const add = document.createElement("button");
 		add.type = "button";
 		add.className = "pf-c-button pf-m-primary";
@@ -75,8 +81,13 @@ export class BackupManager {
 				action.className = "pf-c-button pf-m-secondary";
 				action.textContent = "Open";
 				action.onclick = () => this.wizard(job);
+				const run = document.createElement("button");
+				run.type = "button";
+				run.className = "pf-c-button pf-m-primary";
+				run.textContent = "Run now";
+				run.onclick = () => this.run_now(job);
 				const cell = document.createElement("td");
-				cell.appendChild(action);
+				cell.append(action, run);
 				row.appendChild(cell);
 				body.appendChild(row);
 			}
@@ -89,6 +100,18 @@ export class BackupManager {
 		close.textContent = "Close";
 		close.onclick = () => modal.hide();
 		modal.footer.appendChild(close);
+	}
+
+	async run_now(job) {
+		this.nav_window_ref.start_load();
+		try {
+			const result = await this.run("run", job.id);
+			await this.show(result.skipped ? result.message : `Completed ${job.name}.`);
+		} catch (error) {
+			await this.show(`Could not run ${job.name}: ${error.message || String(error)}`, true);
+		} finally {
+			this.nav_window_ref.stop_load();
+		}
 	}
 
 	schedule_kind(schedule) {
@@ -250,7 +273,7 @@ export class BackupManager {
 		return true;
 	}
 
-	async save(draft, original) {
+	async save(draft) {
 		if (draft.mode === "snapshot" && !draft.snapshotSource) {
 			await this.nav_window_ref.modal_prompt.alert("Snapshot unavailable", "The source must be on ZFS for a snapshot-only job.");
 			return;
@@ -259,12 +282,17 @@ export class BackupManager {
 		const index = jobs.findIndex(job => job.id === draft.id);
 		if (index === -1) jobs.push(draft);
 		else jobs[index] = draft;
-		await this.config_store.save();
 		try {
-			await this.sync_cron();
-			await this.show();
+			await this.config_store.save();
 		} catch (error) {
 			await this.nav_window_ref.modal_prompt.alert("Could not save schedule", error.message || String(error));
+			return;
+		}
+		try {
+			await this.sync_cron();
+			await this.show("Schedule saved and added to the current user's crontab.");
+		} catch (error) {
+			await this.show(`Schedule saved, but cron was not updated: ${error.message || String(error)}`, true);
 		}
 	}
 }
