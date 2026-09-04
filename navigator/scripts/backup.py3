@@ -275,6 +275,26 @@ def run_job(job_id):
             raise
 
 
+def service_status(job_id):
+    result = subprocess.run(
+        ["systemctl", "show", unit_name(job_id, "service"), "--property=LoadState,ActiveState,SubState,Result"],
+        text=True, capture_output=True,
+    )
+    values = {}
+    for line in result.stdout.splitlines():
+        key, separator, value = line.partition("=")
+        if separator:
+            values[key] = value
+    active = values.get("ActiveState", "inactive")
+    return {
+        "running": active in ("active", "activating"),
+        "activeState": active,
+        "subState": values.get("SubState", "dead"),
+        "result": values.get("Result", "unknown"),
+        "loaded": values.get("LoadState") == "loaded",
+    }
+
+
 def main():
     parser = argparse.ArgumentParser()
     command = parser.add_subparsers(dest="action", required=True)
@@ -283,6 +303,8 @@ def main():
     start.add_argument("job_id")
     logs = command.add_parser("logs")
     logs.add_argument("job_id")
+    status = command.add_parser("status")
+    status.add_argument("job_id")
     run = command.add_parser("run")
     run.add_argument("job_id")
     arguments = parser.parse_args()
@@ -300,6 +322,8 @@ def main():
                 text=True, capture_output=True,
             )
             result = {"lines": lines, "journal": journal.stdout.splitlines()[-50:]}
+        elif arguments.action == "status":
+            result = service_status(arguments.job_id)
         else:
             result = run_job(arguments.job_id)
         print(json.dumps({"ok": True, **result}))

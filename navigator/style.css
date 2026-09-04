@@ -396,6 +396,33 @@ input[type="text"] {
 	white-space: pre-wrap;
 }
 
+.nav-backup-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	font-weight: 600;
+}
+
+.nav-backup-status::before {
+	content: "";
+	width: 0.65rem;
+	height: 0.65rem;
+	border-radius: 50%;
+	background: #6a6e73;
+}
+
+.nav-backup-status-running::before {
+	background: #3e8635;
+}
+
+.nav-backup-status-failed::before {
+	background: #c9190b;
+}
+
+.nav-backup-log-status {
+	margin: 0 0 1rem;
+}
+
 .nav-backup-actions {
 	position: relative;
 	display: inline-block;

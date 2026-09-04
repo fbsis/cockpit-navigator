@@ -3,6 +3,7 @@ export class BackupManager {
 		this.nav_window_ref = nav_window_ref;
 		this.config_store = config_store;
 		this.script = "/usr/share/cockpit/navigator/scripts/backup.py3";
+		this.poll_timer = null;
 	}
 
 	async jobs() {
@@ -49,6 +50,29 @@ export class BackupManager {
 		}
 	}
 
+	stop_polling() {
+		if (this.poll_timer !== null) window.clearInterval(this.poll_timer);
+		this.poll_timer = null;
+	}
+
+	start_polling(update, interval = 5000) {
+		this.stop_polling();
+		update();
+		this.poll_timer = window.setInterval(update, interval);
+	}
+
+	status_text(status) {
+		if (status.running) return "Running";
+		if (status.result === "failed") return "Failed";
+		return "Stopped";
+	}
+
+	set_status(element, status) {
+		const text = this.status_text(status);
+		element.textContent = text;
+		element.className = `nav-backup-status nav-backup-status-${text.toLowerCase()}`;
+	}
+
 	open_modal(title) {
 		const modal = this.nav_window_ref.modal_prompt;
 		modal.set_header(title);
@@ -59,6 +83,7 @@ export class BackupManager {
 	}
 
 	async show(notice = "", error = false) {
+		this.stop_polling();
 		const modal = this.open_modal("Backup schedules");
 		const jobs = await this.jobs();
 		const intro = document.createElement("p");
@@ -82,14 +107,23 @@ export class BackupManager {
 		} else {
 			const table = document.createElement("table");
 			table.className = "nav-choice-table nav-backup-table";
-			table.innerHTML = "<thead><tr><th>Name</th><th>Type</th><th>Schedule</th><th>Last run</th><th></th></tr></thead>";
+			table.innerHTML = "<thead><tr><th>Name</th><th>Type</th><th>Schedule</th><th>Status</th><th>Last run</th><th></th></tr></thead>";
 			const body = document.createElement("tbody");
+			const status_elements = new Map();
 			for (const job of jobs) {
 				const last = job.lastRun
 					? `${job.lastRun.status === "success" ? "Success" : "Failed"}: ${new Date(job.lastRun.at).toLocaleString()}`
 					: "Not run yet";
 				const row = document.createElement("tr");
-				row.innerHTML = `<td>${this.escape(job.name)}</td><td>${job.mode === "snapshot" ? "ZFS snapshot" : "rsync copy"}</td><td>${job.enabled ? this.escape(this.on_calendar(job)) : "Paused"}</td><td>${this.escape(last)}</td>`;
+				row.innerHTML = `<td>${this.escape(job.name)}</td><td>${job.mode === "snapshot" ? "ZFS snapshot" : "rsync copy"}</td><td>${job.enabled ? this.escape(this.on_calendar(job)) : "Paused"}</td>`;
+				const status = document.createElement("td");
+				const indicator = document.createElement("span");
+				this.set_status(indicator, { running: false, result: "unknown" });
+				status.appendChild(indicator);
+				status_elements.set(job.id, indicator);
+				const last_cell = document.createElement("td");
+				last_cell.textContent = last;
+				row.append(status, last_cell);
 				const cell = document.createElement("td");
 				cell.appendChild(this.action_menu(job));
 				row.appendChild(cell);
@@ -97,12 +131,20 @@ export class BackupManager {
 			}
 			table.appendChild(body);
 			modal.body.appendChild(table);
+			this.start_polling(async () => {
+				for (const job of jobs) {
+					const indicator = status_elements.get(job.id);
+					if (!indicator?.isConnected) continue;
+					const status = await this.run("status", job.id).catch(() => ({ running: false, result: "failed" }));
+					this.set_status(indicator, status);
+				}
+			});
 		}
 		const close = document.createElement("button");
 		close.type = "button";
 		close.className = "pf-c-button pf-m-secondary";
 		close.textContent = "Close";
-		close.onclick = () => modal.hide();
+		close.onclick = () => { this.stop_polling(); modal.hide(); };
 		modal.footer.appendChild(close);
 	}
 
@@ -147,6 +189,7 @@ export class BackupManager {
 	}
 
 	async run_now(job) {
+		this.stop_polling();
 		this.nav_window_ref.start_load();
 		try {
 			await this.run("start", job.id);
@@ -159,25 +202,40 @@ export class BackupManager {
 	}
 
 	async show_logs(job) {
+		this.stop_polling();
 		const modal = this.open_modal(`Logs: ${job.name}`);
-		const result = await this.run("logs", job.id).catch(error => ({ lines: [`Could not load logs: ${error.message || String(error)}`], journal: [] }));
-		for (const [title, lines] of [["rsync job log", result.lines], ["systemd service journal", result.journal]]) {
+		const service_status = document.createElement("p");
+		service_status.className = "nav-backup-log-status";
+		const logs = new Map();
+		for (const title of ["rsync job log", "systemd service journal"]) {
 			const heading = document.createElement("h3");
 			heading.textContent = title;
 			const log = document.createElement("pre");
 			log.className = "nav-backup-log";
-			log.textContent = lines.join("\n") || "No entries yet.";
+			logs.set(title, log);
 			modal.body.append(heading, log);
 		}
+		modal.body.prepend(service_status);
+		this.start_polling(async () => {
+			const [result, status] = await Promise.all([
+				this.run("logs", job.id).catch(error => ({ lines: [`Could not load logs: ${error.message || String(error)}`], journal: [] })),
+				this.run("status", job.id).catch(() => ({ running: false, result: "failed" })),
+			]);
+			this.set_status(service_status, status);
+			service_status.textContent = `${this.status_text(status)} - refreshing every 3 seconds`;
+			logs.get("rsync job log").textContent = result.lines.join("\n") || "No entries yet.";
+			logs.get("systemd service journal").textContent = result.journal.join("\n") || "No entries yet.";
+		}, 3000);
 		const close = document.createElement("button");
 		close.type = "button";
 		close.className = "pf-c-button pf-m-secondary";
 		close.textContent = "Close";
-		close.onclick = () => this.show();
+		close.onclick = () => { this.stop_polling(); this.show(); };
 		modal.footer.appendChild(close);
 	}
 
 	async remove(job) {
+		this.stop_polling();
 		const confirmed = await this.nav_window_ref.modal_prompt.confirm(
 			`Delete ${job.name}?`,
 			"The schedule, timer, service, and Navigator job log will be removed.",
@@ -204,6 +262,7 @@ export class BackupManager {
 	}
 
 	async wizard(job = null) {
+		this.stop_polling();
 		const paths = [this.nav_window_ref.pwd().path_str(), ...this.directory_tabs()];
 		const draft = {
 			id: job?.id || crypto.randomUUID(), name: job?.name || "Backup", mode: job?.mode || "rsync",
