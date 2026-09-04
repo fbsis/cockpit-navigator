@@ -25,14 +25,14 @@ export class BackupManager {
 	}
 
 	async run(action, ...arguments_) {
-		const output = await cockpit.spawn([this.script, action, ...arguments_], { err: "out" });
+		const output = await cockpit.spawn([this.script, action, ...arguments_], { superuser: "require", err: "out" });
 		const result = JSON.parse(output);
 		if (!result.ok) throw new Error(result.error || "Backup operation failed.");
 		return result;
 	}
 
-	async sync_cron() {
-		await this.run("sync-cron");
+	async sync_systemd() {
+		await this.run("sync-systemd");
 	}
 
 	async wait_for(operation, description) {
@@ -89,7 +89,7 @@ export class BackupManager {
 					? `${job.lastRun.status === "success" ? "Success" : "Failed"}: ${new Date(job.lastRun.at).toLocaleString()}`
 					: "Not run yet";
 				const row = document.createElement("tr");
-				row.innerHTML = `<td>${this.escape(job.name)}</td><td>${job.mode === "snapshot" ? "ZFS snapshot" : "rsync copy"}</td><td>${job.enabled ? this.escape(job.schedule) : "Paused"}</td><td>${this.escape(last)}</td>`;
+				row.innerHTML = `<td>${this.escape(job.name)}</td><td>${job.mode === "snapshot" ? "ZFS snapshot" : "rsync copy"}</td><td>${job.enabled ? this.escape(this.on_calendar(job)) : "Paused"}</td><td>${this.escape(last)}</td>`;
 				const action = document.createElement("button");
 				action.type = "button";
 				action.className = "pf-c-button pf-m-secondary";
@@ -119,8 +119,8 @@ export class BackupManager {
 	async run_now(job) {
 		this.nav_window_ref.start_load();
 		try {
-			const result = await this.run("run", job.id);
-			await this.show(result.skipped ? result.message : `Completed ${job.name}.`);
+			await this.run("start", job.id);
+			await this.show(`Started ${job.name}. The service status will update after it finishes.`);
 		} catch (error) {
 			await this.show(`Could not run ${job.name}: ${error.message || String(error)}`, true);
 		} finally {
@@ -128,8 +128,12 @@ export class BackupManager {
 		}
 	}
 
-	schedule_kind(schedule) {
-		return { "0 */2 * * *": "every-2", "0 */6 * * *": "every-6", "0 2 * * *": "daily" }[schedule] || "custom";
+	on_calendar(job) {
+		return job.onCalendar || { "0 */2 * * *": "*-*-* 00/2:00:00", "0 */6 * * *": "*-*-* 00/6:00:00", "0 2 * * *": "*-*-* 02:00:00" }[job.schedule] || "*-*-* 02:00:00";
+	}
+
+	schedule_kind(calendar) {
+		return { "*-*-* 00/2:00:00": "every-2", "*-*-* 00/6:00:00": "every-6", "*-*-* 02:00:00": "daily" }[calendar] || "custom";
 	}
 
 	async wizard(job = null) {
@@ -137,8 +141,8 @@ export class BackupManager {
 		const draft = {
 			id: job?.id || crypto.randomUUID(), name: job?.name || "Backup", mode: job?.mode || "rsync",
 			source: job?.source || paths[0], destination: job?.destination || paths[1] || "/backup",
-			enabled: job?.enabled ?? true, schedule: job?.schedule || "0 2 * * *",
-			scheduleKind: this.schedule_kind(job?.schedule || "0 2 * * *"),
+			enabled: job?.enabled ?? true, onCalendar: this.on_calendar(job || {}),
+			scheduleKind: this.schedule_kind(this.on_calendar(job || {})),
 			snapshotSource: job?.snapshotSource || false, snapshotDestination: job?.snapshotDestination || false,
 			snapshotRetention: Number(job?.snapshotRetention ?? 14), lastRun: job?.lastRun || null,
 		};
@@ -219,10 +223,10 @@ export class BackupManager {
 	render_schedule(body, draft) {
 		const kind = document.createElement("label");
 		kind.className = "nav-backup-field";
-		kind.innerHTML = "Frequency<select name=\"scheduleKind\"><option value=\"every-2\">Every 2 hours</option><option value=\"every-6\">Every 6 hours</option><option value=\"daily\">Every day at 02:00</option><option value=\"custom\">Custom cron format</option></select>";
+		kind.innerHTML = "Frequency<select name=\"scheduleKind\"><option value=\"every-2\">Every 2 hours</option><option value=\"every-6\">Every 6 hours</option><option value=\"daily\">Every day at 02:00</option><option value=\"custom\">Custom systemd calendar</option></select>";
 		kind.querySelector("select").value = draft.scheduleKind;
 		body.appendChild(kind);
-		body.appendChild(this.input("Cron format", draft.schedule, "schedule"));
+		body.appendChild(this.input("Systemd OnCalendar", draft.onCalendar, "onCalendar"));
 		const enabled = document.createElement("label");
 		enabled.className = "nav-backup-checkbox";
 		enabled.innerHTML = `<input type="checkbox" name="enabled" ${draft.enabled ? "checked" : ""}> Run automatically`;
@@ -252,7 +256,7 @@ export class BackupManager {
 
 	async render_summary(body, draft) {
 		const type = draft.mode === "snapshot" ? "ZFS snapshot" : "rsync copy";
-		body.innerHTML += `<h3>Summary</h3><dl class="nav-backup-summary"><dt>Type</dt><dd>${type}</dd><dt>Source</dt><dd>${this.escape(draft.source)}</dd>${draft.mode === "rsync" ? `<dt>Destination</dt><dd>${this.escape(draft.destination)}</dd>` : ""}<dt>Schedule</dt><dd>${draft.enabled ? this.escape(draft.schedule) : "Paused"}</dd><dt>Snapshot retention</dt><dd>${draft.snapshotRetention || "Unlimited"}</dd></dl>`;
+		body.innerHTML += `<h3>Summary</h3><dl class="nav-backup-summary"><dt>Type</dt><dd>${type}</dd><dt>Source</dt><dd>${this.escape(draft.source)}</dd>${draft.mode === "rsync" ? `<dt>Destination</dt><dd>${this.escape(draft.destination)}</dd>` : ""}<dt>Schedule</dt><dd>${draft.enabled ? this.escape(draft.onCalendar) : "Paused"}</dd><dt>Snapshot retention</dt><dd>${draft.snapshotRetention || "Unlimited"}</dd></dl>`;
 		if (!draft.lastRun) return;
 		const run = draft.lastRun;
 		body.innerHTML += `<h3>Latest execution</h3><dl class="nav-backup-summary"><dt>Status</dt><dd>${this.escape(run.status)}</dd><dt>Started</dt><dd>${this.escape(new Date(run.at).toLocaleString())}</dd><dt>Duration</dt><dd>${run.durationSeconds ?? "-"} seconds</dd><dt>Files</dt><dd>${this.escape(run.metrics?.files || "-")}</dd><dt>Transferred</dt><dd>${this.escape(run.metrics?.transferred || "-")}</dd><dt>Snapshots kept</dt><dd>${run.metrics?.snapshots ?? "-"}</dd></dl>`;
@@ -276,11 +280,11 @@ export class BackupManager {
 			}
 		} else if (step === 1) {
 			draft.scheduleKind = get("scheduleKind").value;
-			const presets = { "every-2": "0 */2 * * *", "every-6": "0 */6 * * *", daily: "0 2 * * *" };
-			draft.schedule = presets[draft.scheduleKind] || get("schedule").value.trim();
+			const presets = { "every-2": "*-*-* 00/2:00:00", "every-6": "*-*-* 00/6:00:00", daily: "*-*-* 02:00:00" };
+			draft.onCalendar = presets[draft.scheduleKind] || get("onCalendar").value.trim();
 			draft.enabled = get("enabled").checked;
-			if (draft.enabled && !/^[0-9*/,-]+\s+[0-9*/,-]+\s+[0-9*/,-]+\s+[0-9*/,-]+\s+[0-9*/,-]+$/.test(draft.schedule)) {
-				this.nav_window_ref.modal_prompt.alert("Invalid schedule", "Enter a five-field cron expression.");
+			if (draft.enabled && (!draft.onCalendar || /[\r\n]/.test(draft.onCalendar))) {
+				this.nav_window_ref.modal_prompt.alert("Invalid schedule", "Enter a single-line systemd OnCalendar expression.");
 				return false;
 			}
 		} else if (step === 2) {
@@ -305,10 +309,10 @@ export class BackupManager {
 			return;
 		}
 		try {
-			await this.wait_for(this.sync_cron(), "Updating crontab");
+			await this.wait_for(this.sync_systemd(), "Updating systemd timers");
 			this.nav_window_ref.modal_prompt.hide();
 		} catch (error) {
-			await this.show(`Schedule saved, but cron was not updated: ${error.message || String(error)}`, true);
+			await this.show(`Schedule saved, but systemd timers were not updated: ${error.message || String(error)}`, true);
 		}
 	}
 }

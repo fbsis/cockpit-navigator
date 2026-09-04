@@ -14,7 +14,7 @@ import sys
 
 
 SCRIPT_PATH = "/usr/share/cockpit/navigator/scripts/backup.py3"
-CRON_PREFIX = "# cockpit-navigator-backup:"
+UNIT_DIRECTORY = Path("/etc/systemd/system")
 
 
 def config_path():
@@ -49,9 +49,12 @@ def jobs_from(config):
     return jobs if isinstance(jobs, list) else []
 
 
-def valid_cron(expression):
-    fields = expression.split()
-    return len(fields) == 5 and all(re.fullmatch(r"[0-9*/,-]+", field) for field in fields)
+def on_calendar(job):
+    legacy = {"0 */2 * * *": "*-*-* 00/2:00:00", "0 */6 * * *": "*-*-* 00/6:00:00", "0 2 * * *": "*-*-* 02:00:00"}
+    value = job.get("onCalendar") or legacy.get(job.get("schedule"))
+    if not isinstance(value, str) or not value.strip() or "\n" in value or "\r" in value:
+        raise ValueError("Backup schedule must be a valid systemd OnCalendar expression.")
+    return value.strip()
 
 
 def validate_job(job):
@@ -64,38 +67,78 @@ def validate_job(job):
         value = job.get(field)
         if not isinstance(value, str) or not os.path.isabs(value):
             raise ValueError(f"Backup {field} must be an absolute path.")
-    if job.get("schedule") and not valid_cron(job["schedule"]):
-        raise ValueError("Backup schedule must be a five-field cron expression.")
+    if job.get("enabled"):
+        on_calendar(job)
 
 
-def cron_entries(jobs):
-    entries = []
+def unit_name(job_id, suffix):
+    return f"cockpit-navigator-backup@{job_id}.{suffix}"
+
+
+def write_unit(name, content):
+    path = UNIT_DIRECTORY / name
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(content, encoding="utf-8")
+    os.chmod(temporary, 0o644)
+    os.replace(temporary, path)
+
+
+def service_unit(job_id):
+    return "\n".join([
+        "[Unit]",
+        f"Description=Cockpit Navigator backup {job_id}",
+        "",
+        "[Service]",
+        "Type=oneshot",
+        f"ExecStart={SCRIPT_PATH} run {job_id}",
+        "",
+    ])
+
+
+def timer_unit(job_id, calendar):
+    return "\n".join([
+        "[Unit]",
+        f"Description=Schedule Cockpit Navigator backup {job_id}",
+        "",
+        "[Timer]",
+        f"OnCalendar={calendar}",
+        "Persistent=true",
+        f"Unit={unit_name(job_id, 'service')}",
+        "",
+        "[Install]",
+        "WantedBy=timers.target",
+        "",
+    ])
+
+
+def sync_systemd():
+    config = load_config()
+    jobs = jobs_from(config)
+    job_ids = set()
+    UNIT_DIRECTORY.mkdir(mode=0o755, parents=True, exist_ok=True)
     for job in jobs:
         validate_job(job)
-        if not job.get("enabled") or not job.get("schedule"):
-            continue
-        log_dir = Path(os.environ.get("XDG_CACHE_HOME", "~/.cache")).expanduser() / "cockpit-navigator" / "backups"
-        log_path = log_dir / f"{job['id']}.log"
-        entries.append(
-            f"{job['schedule']} {SCRIPT_PATH} run {job['id']} >> {log_path} 2>&1 {CRON_PREFIX}{job['id']}"
-        )
-    return entries
-
-
-def sync_cron():
-    config = load_config()
-    current = subprocess.run(["crontab", "-l"], text=True, capture_output=True)
-    lines = [] if current.returncode else current.stdout.splitlines()
-    lines = [line for line in lines if CRON_PREFIX not in line]
-    entries = cron_entries(jobs_from(config))
-    if entries:
-        log_dir = Path(os.environ.get("XDG_CACHE_HOME", "~/.cache")).expanduser() / "cockpit-navigator" / "backups"
-        log_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-    content = "\n".join(lines + entries) + "\n"
-    result = subprocess.run(["crontab", "-"], input=content, text=True, capture_output=True)
-    if result.returncode:
-        raise RuntimeError(result.stderr.strip() or "Could not update crontab.")
-    return {"jobs": len(entries)}
+        job_ids.add(job["id"])
+        write_unit(unit_name(job["id"], "service"), service_unit(job["id"]))
+        if job.get("enabled"):
+            write_unit(unit_name(job["id"], "timer"), timer_unit(job["id"], on_calendar(job)))
+        else:
+            timer = UNIT_DIRECTORY / unit_name(job["id"], "timer")
+            subprocess.run(["systemctl", "disable", "--now", timer.name], capture_output=True)
+            timer.unlink(missing_ok=True)
+    for timer in UNIT_DIRECTORY.glob("cockpit-navigator-backup@*.timer"):
+        job_id = timer.name[len("cockpit-navigator-backup@"): -len(".timer")]
+        if job_id not in job_ids:
+            subprocess.run(["systemctl", "disable", "--now", timer.name], capture_output=True)
+            timer.unlink()
+            (UNIT_DIRECTORY / unit_name(job_id, "service")).unlink(missing_ok=True)
+    subprocess.run(["systemctl", "daemon-reload"], check=True, capture_output=True)
+    enabled = 0
+    for job in jobs:
+        if job.get("enabled"):
+            subprocess.run(["systemctl", "enable", "--now", unit_name(job["id"], "timer")], check=True, capture_output=True)
+            enabled += 1
+    return {"jobs": enabled}
 
 
 def zfs_dataset(path):
@@ -218,15 +261,20 @@ def run_job(job_id):
 def main():
     parser = argparse.ArgumentParser()
     command = parser.add_subparsers(dest="action", required=True)
-    command.add_parser("sync-cron")
+    command.add_parser("sync-systemd")
+    start = command.add_parser("start")
+    start.add_argument("job_id")
     logs = command.add_parser("logs")
     logs.add_argument("job_id")
     run = command.add_parser("run")
     run.add_argument("job_id")
     arguments = parser.parse_args()
     try:
-        if arguments.action == "sync-cron":
-            result = sync_cron()
+        if arguments.action == "sync-systemd":
+            result = sync_systemd()
+        elif arguments.action == "start":
+            subprocess.run(["systemctl", "start", "--no-block", unit_name(arguments.job_id, "service")], check=True, capture_output=True)
+            result = {"started": True}
         elif arguments.action == "logs":
             path = log_path(arguments.job_id)
             lines = path.read_text(encoding="utf-8").splitlines()[-50:] if path.exists() else []
