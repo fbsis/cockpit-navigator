@@ -163,7 +163,7 @@ export class BackupManager {
 		const actions = [
 			["Open", "pf-m-secondary", () => this.wizard(job)],
 			["Run now", "pf-m-primary", () => this.run_now(job)],
-			["Logs", "pf-m-secondary", () => this.show_logs(job)],
+			["Logs", "pf-m-secondary", () => this.wizard(job, 3)],
 			["Delete", "pf-m-danger", () => this.remove(job)],
 		];
 		for (const [label, style, handler] of actions) {
@@ -201,39 +201,6 @@ export class BackupManager {
 		}
 	}
 
-	async show_logs(job) {
-		this.stop_polling();
-		const modal = this.open_modal(`Logs: ${job.name}`);
-		const service_status = document.createElement("p");
-		service_status.className = "nav-backup-log-status";
-		const logs = new Map();
-		for (const title of ["rsync job log", "systemd service journal"]) {
-			const heading = document.createElement("h3");
-			heading.textContent = title;
-			const log = document.createElement("pre");
-			log.className = "nav-backup-log";
-			logs.set(title, log);
-			modal.body.append(heading, log);
-		}
-		modal.body.prepend(service_status);
-		this.start_polling(async () => {
-			const [result, status] = await Promise.all([
-				this.run("logs", job.id).catch(error => ({ lines: [`Could not load logs: ${error.message || String(error)}`], journal: [] })),
-				this.run("status", job.id).catch(() => ({ running: false, result: "failed" })),
-			]);
-			this.set_status(service_status, status);
-			service_status.textContent = `${this.status_text(status)} - refreshing every 3 seconds`;
-			logs.get("rsync job log").textContent = result.lines.join("\n") || "No entries yet.";
-			logs.get("systemd service journal").textContent = result.journal.join("\n") || "No entries yet.";
-		}, 3000);
-		const close = document.createElement("button");
-		close.type = "button";
-		close.className = "pf-c-button pf-m-secondary";
-		close.textContent = "Close";
-		close.onclick = () => { this.stop_polling(); this.show(); };
-		modal.footer.appendChild(close);
-	}
-
 	async remove(job) {
 		this.stop_polling();
 		const confirmed = await this.nav_window_ref.modal_prompt.confirm(
@@ -261,7 +228,7 @@ export class BackupManager {
 		return { "*-*-* 00/2:00:00": "every-2", "*-*-* 00/6:00:00": "every-6", "*-*-* 02:00:00": "daily" }[calendar] || "custom";
 	}
 
-	async wizard(job = null) {
+	async wizard(job = null, initial_step = 0) {
 		this.stop_polling();
 		const paths = [this.nav_window_ref.pwd().path_str(), ...this.directory_tabs()];
 		const draft = {
@@ -272,9 +239,10 @@ export class BackupManager {
 			snapshotSource: job?.snapshotSource || false, snapshotDestination: job?.snapshotDestination || false,
 			snapshotRetention: Number(job?.snapshotRetention ?? 14), lastRun: job?.lastRun || null,
 		};
-		let step = 0;
+		let step = initial_step;
 		const modal = this.open_modal(job ? `Edit schedule: ${job.name}` : "New backup schedule");
 		const render = async () => {
+			this.stop_polling();
 			modal.body.innerHTML = "";
 			modal.footer.innerHTML = "";
 			const progress = document.createElement("p");
@@ -289,7 +257,7 @@ export class BackupManager {
 			cancel.type = "button";
 			cancel.className = "pf-c-button pf-m-secondary";
 			cancel.textContent = "Cancel";
-			cancel.onclick = () => modal.hide();
+			cancel.onclick = () => { this.stop_polling(); modal.hide(); };
 			modal.footer.appendChild(cancel);
 			if (step) {
 				const back = document.createElement("button");
@@ -387,15 +355,28 @@ export class BackupManager {
 			const run = draft.lastRun;
 			body.innerHTML += `<h3>Latest execution</h3><dl class="nav-backup-summary"><dt>Status</dt><dd>${this.escape(run.status)}</dd><dt>Started</dt><dd>${this.escape(new Date(run.at).toLocaleString())}</dd><dt>Duration</dt><dd>${run.durationSeconds ?? "-"} seconds</dd><dt>Files</dt><dd>${this.escape(run.metrics?.files || "-")}</dd><dt>Transferred</dt><dd>${this.escape(run.metrics?.transferred || "-")}</dd><dt>Snapshots kept</dt><dd>${run.metrics?.snapshots ?? "-"}</dd></dl>`;
 		}
-		const logs = await this.run("logs", draft.id).catch(() => ({ lines: [], journal: [] }));
-		for (const [title, lines] of [["rsync job log", logs.lines], ["systemd service journal", logs.journal]]) {
+		const service_status = document.createElement("p");
+		service_status.className = "nav-backup-log-status";
+		const logs = new Map();
+		for (const title of ["rsync job log", "systemd service journal"]) {
 			const heading = document.createElement("h3");
 			heading.textContent = title;
 			const log = document.createElement("pre");
 			log.className = "nav-backup-log";
-			log.textContent = lines.join("\n") || "No entries yet.";
+			logs.set(title, log);
 			body.append(heading, log);
 		}
+		body.appendChild(service_status);
+		this.start_polling(async () => {
+			const [result, status] = await Promise.all([
+				this.run("logs", draft.id).catch(error => ({ lines: [`Could not load logs: ${error.message || String(error)}`], journal: [] })),
+				this.run("status", draft.id).catch(() => ({ running: false, result: "failed" })),
+			]);
+			this.set_status(service_status, status);
+			service_status.textContent = `${this.status_text(status)} - refreshing every 3 seconds`;
+			logs.get("rsync job log").textContent = result.lines.join("\n") || "No entries yet.";
+			logs.get("systemd service journal").textContent = result.journal.join("\n") || "No entries yet.";
+		}, 3000);
 	}
 
 	read_step(body, draft, step) {
@@ -441,6 +422,7 @@ export class BackupManager {
 		}
 		try {
 			await this.wait_for(this.sync_systemd(), "Updating systemd timers");
+			this.stop_polling();
 			this.nav_window_ref.modal_prompt.hide();
 		} catch (error) {
 			await this.show(`Schedule saved, but systemd timers were not updated: ${error.message || String(error)}`, true);
