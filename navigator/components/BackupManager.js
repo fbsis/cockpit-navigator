@@ -13,13 +13,19 @@ export class BackupManager {
 	}
 
 	directory_tabs() {
-		return (this.nav_window_ref.tab_manager?.tabs || [])
+		return [...new Set((this.nav_window_ref.tab_manager?.tabs || [])
 			.filter(tab => tab.type === "directory")
-			.map(tab => this.nav_window_ref.tab_manager.current_path(tab));
+			.map(tab => this.nav_window_ref.tab_manager.current_path(tab)))];
+	}
+
+	escape(value) {
+		const element = document.createElement("span");
+		element.textContent = value ?? "";
+		return element.innerHTML;
 	}
 
 	async run(action, ...arguments_) {
-		const output = await cockpit.spawn([this.script, action, ...arguments_], { superuser: "try", err: "out" });
+		const output = await cockpit.spawn([this.script, action, ...arguments_], { err: "out" });
 		const result = JSON.parse(output);
 		if (!result.ok) throw new Error(result.error || "Backup operation failed.");
 		return result;
@@ -29,118 +35,236 @@ export class BackupManager {
 		await this.run("sync-cron");
 	}
 
-	async show() {
-		const jobs = await this.jobs();
-		const choices = [{ label: "New backup", value: "new", primary: true }];
-		for (const job of jobs) {
-			const status = job.lastRun?.status === "success" ? "last run succeeded" : job.lastRun?.status === "error" ? "last run failed" : "not run yet";
-			choices.push({ label: `${job.name} - ${job.enabled ? job.schedule : "paused"} (${status})`, value: job.id });
-		}
-		const selected = await this.nav_window_ref.modal_prompt.choose_list("Backups", "Create, run, or remove a backup job.", choices);
-		if (!selected) return;
-		if (selected === "new") return this.create();
-		const job = jobs.find(item => item.id === selected);
-		if (job) await this.manage(job);
+	open_modal(title) {
+		const modal = this.nav_window_ref.modal_prompt;
+		modal.set_header(title);
+		modal.body.innerHTML = "";
+		modal.footer.innerHTML = "";
+		modal.show();
+		return modal;
 	}
 
-	async create() {
-		const paths = [...new Set([this.nav_window_ref.pwd().path_str(), ...this.directory_tabs()])];
-		const mode = await this.nav_window_ref.modal_prompt.choose("New backup", "Choose how this job protects the current data.", [
-			{ label: "Copy with rsync", value: "rsync", primary: true },
-			{ label: "ZFS snapshot only", value: "snapshot" },
-		]);
-		if (!mode) return;
-		const fields = {
-			name: { label: "Name:", type: "text", default: "Backup" },
-			source: { label: "Source:", type: "text", default: paths[0], options: paths },
-			schedule: { label: "Cron schedule:", type: "text", default: "0 2 * * *" },
-			enabled: { label: "Run automatically", type: "checkbox", default: true },
-		};
-		if (mode === "rsync") fields.destination = { label: "Destination:", type: "text", default: paths[1] || "/backup", options: paths };
-		const response = await this.nav_window_ref.modal_prompt.prompt(mode === "rsync" ? "New rsync backup" : "New ZFS snapshot", fields);
-		if (!response) return;
-		const name = response.name.trim();
-		const source = response.source.trim();
-		const destination = response.destination?.trim() || null;
-		if (!name || !source.startsWith("/") || (mode === "rsync" && (!destination.startsWith("/") || source === destination))) {
-			await this.nav_window_ref.modal_prompt.alert("Invalid backup", "Enter a name and different absolute source and destination paths.");
-			return;
-		}
-		if (response.enabled && !/^[0-9*/,-]+\s+[0-9*/,-]+\s+[0-9*/,-]+\s+[0-9*/,-]+\s+[0-9*/,-]+$/.test(response.schedule.trim())) {
-			await this.nav_window_ref.modal_prompt.alert("Invalid schedule", "Enter a five-field cron expression, for example: 0 2 * * *.");
-			return;
-		}
-		const sourceZfs = await this.nav_window_ref.zfs_snapshot_manager.detect(source).catch(() => ({ supported: false }));
-		if (mode === "snapshot" && !sourceZfs.supported) {
-			await this.nav_window_ref.modal_prompt.alert("Snapshot unavailable", "The selected source is not on a ZFS dataset.");
-			return;
-		}
-		const destinationZfs = destination
-			? await this.nav_window_ref.zfs_snapshot_manager.detect(destination).catch(() => ({ supported: false }))
-			: { supported: false };
-		if (mode === "snapshot") {
-			const jobs = await this.jobs();
-			jobs.push({
-				id: crypto.randomUUID(), name, mode, source, schedule: response.schedule.trim(), enabled: response.enabled,
-				snapshotSource: true, snapshotDestination: false,
-			});
-			await this.config_store.save();
-			try {
-				await this.sync_cron();
-				await this.nav_window_ref.modal_prompt.alert("Snapshot job saved", `Snapshots will be created for ${sourceZfs.dataset}.`);
-			} catch (error) {
-				await this.nav_window_ref.modal_prompt.alert("Could not schedule snapshot", error.message || String(error));
-			}
-			return;
-		}
-		const snapshots = await this.nav_window_ref.modal_prompt.prompt("ZFS snapshots", {
-			source: { label: sourceZfs.supported ? `Snapshot source (${sourceZfs.dataset})` : "Source is not on ZFS", type: "checkbox", default: false },
-			destination: { label: destinationZfs.supported ? `Snapshot destination (${destinationZfs.dataset})` : "Destination is not on ZFS", type: "checkbox", default: false },
-		});
-		if (!snapshots) return;
+	async show() {
+		const modal = this.open_modal("Backup schedules");
 		const jobs = await this.jobs();
-		jobs.push({
-			id: crypto.randomUUID(), name, mode, source, destination, schedule: response.schedule.trim(), enabled: response.enabled,
-			snapshotSource: sourceZfs.supported && snapshots.source,
-			snapshotDestination: destinationZfs.supported && snapshots.destination,
-		});
+		const intro = document.createElement("p");
+		intro.textContent = "Scheduled rsync copies and ZFS snapshots run as the current user.";
+		const add = document.createElement("button");
+		add.type = "button";
+		add.className = "pf-c-button pf-m-primary";
+		add.textContent = "New schedule";
+		add.onclick = () => this.wizard();
+		modal.body.append(intro, add);
+		if (!jobs.length) {
+			const empty = document.createElement("p");
+			empty.textContent = "No backup schedules yet.";
+			modal.body.appendChild(empty);
+		} else {
+			const table = document.createElement("table");
+			table.className = "nav-choice-table nav-backup-table";
+			table.innerHTML = "<thead><tr><th>Name</th><th>Type</th><th>Schedule</th><th>Last run</th><th></th></tr></thead>";
+			const body = document.createElement("tbody");
+			for (const job of jobs) {
+				const last = job.lastRun
+					? `${job.lastRun.status === "success" ? "Success" : "Failed"}: ${new Date(job.lastRun.at).toLocaleString()}`
+					: "Not run yet";
+				const row = document.createElement("tr");
+				row.innerHTML = `<td>${this.escape(job.name)}</td><td>${job.mode === "snapshot" ? "ZFS snapshot" : "rsync copy"}</td><td>${job.enabled ? this.escape(job.schedule) : "Paused"}</td><td>${this.escape(last)}</td>`;
+				const action = document.createElement("button");
+				action.type = "button";
+				action.className = "pf-c-button pf-m-secondary";
+				action.textContent = "Open";
+				action.onclick = () => this.wizard(job);
+				const cell = document.createElement("td");
+				cell.appendChild(action);
+				row.appendChild(cell);
+				body.appendChild(row);
+			}
+			table.appendChild(body);
+			modal.body.appendChild(table);
+		}
+		const close = document.createElement("button");
+		close.type = "button";
+		close.className = "pf-c-button pf-m-secondary";
+		close.textContent = "Close";
+		close.onclick = () => modal.hide();
+		modal.footer.appendChild(close);
+	}
+
+	schedule_kind(schedule) {
+		return { "0 */2 * * *": "every-2", "0 */6 * * *": "every-6", "0 2 * * *": "daily" }[schedule] || "custom";
+	}
+
+	async wizard(job = null) {
+		const paths = [this.nav_window_ref.pwd().path_str(), ...this.directory_tabs()];
+		const draft = {
+			id: job?.id || crypto.randomUUID(), name: job?.name || "Backup", mode: job?.mode || "rsync",
+			source: job?.source || paths[0], destination: job?.destination || paths[1] || "/backup",
+			enabled: job?.enabled ?? true, schedule: job?.schedule || "0 2 * * *",
+			scheduleKind: this.schedule_kind(job?.schedule || "0 2 * * *"),
+			snapshotSource: job?.snapshotSource || false, snapshotDestination: job?.snapshotDestination || false,
+			snapshotRetention: Number(job?.snapshotRetention ?? 14), lastRun: job?.lastRun || null,
+		};
+		let step = 0;
+		const modal = this.open_modal(job ? `Edit schedule: ${job.name}` : "New backup schedule");
+		const render = async () => {
+			modal.body.innerHTML = "";
+			modal.footer.innerHTML = "";
+			const progress = document.createElement("p");
+			progress.className = "nav-backup-progress";
+			progress.textContent = `Step ${step + 1} of 4`;
+			modal.body.appendChild(progress);
+			if (step === 0) this.render_paths(modal.body, draft, paths);
+			else if (step === 1) this.render_schedule(modal.body, draft);
+			else if (step === 2) await this.render_snapshots(modal.body, draft);
+			else await this.render_summary(modal.body, draft);
+			const cancel = document.createElement("button");
+			cancel.type = "button";
+			cancel.className = "pf-c-button pf-m-secondary";
+			cancel.textContent = "Cancel";
+			cancel.onclick = () => modal.hide();
+			modal.footer.appendChild(cancel);
+			if (step) {
+				const back = document.createElement("button");
+				back.type = "button";
+				back.className = "pf-c-button pf-m-secondary";
+				back.textContent = "Back";
+				back.onclick = () => { this.read_step(modal.body, draft, step); step--; render(); };
+				modal.footer.appendChild(back);
+			}
+			const next = document.createElement("button");
+			next.type = "button";
+			next.className = "pf-c-button pf-m-primary";
+			next.textContent = step === 3 ? "Save schedule" : "Next";
+			next.onclick = async () => {
+				if (!this.read_step(modal.body, draft, step)) return;
+				if (step < 3) { step++; await render(); }
+				else await this.save(draft, job);
+			};
+			modal.footer.appendChild(next);
+		};
+		await render();
+	}
+
+	input(label, value, name, options = []) {
+		const row = document.createElement("label");
+		row.className = "nav-backup-field";
+		row.textContent = label;
+		const input = document.createElement("input");
+		input.name = name;
+		input.type = "text";
+		input.value = value;
+		if (options.length) {
+			const list = document.createElement("datalist");
+			list.id = `backup-${name}`;
+			list.innerHTML = options.map(option => `<option value="${this.escape(option)}"></option>`).join("");
+			input.setAttribute("list", list.id);
+			row.append(input, list);
+		} else row.appendChild(input);
+		return row;
+	}
+
+	render_paths(body, draft, paths) {
+		body.append(this.input("Name", draft.name, "name"), this.input("Source", draft.source, "source", paths));
+		const mode = document.createElement("label");
+		mode.className = "nav-backup-field";
+		mode.textContent = "Type";
+		mode.innerHTML += `<select name="mode"><option value="rsync">rsync copy</option><option value="snapshot">ZFS snapshot only</option></select>`;
+		mode.querySelector("select").value = draft.mode;
+		body.appendChild(mode);
+		if (draft.mode === "rsync") body.appendChild(this.input("Destination", draft.destination, "destination", paths));
+	}
+
+	render_schedule(body, draft) {
+		const kind = document.createElement("label");
+		kind.className = "nav-backup-field";
+		kind.innerHTML = "Frequency<select name=\"scheduleKind\"><option value=\"every-2\">Every 2 hours</option><option value=\"every-6\">Every 6 hours</option><option value=\"daily\">Every day at 02:00</option><option value=\"custom\">Custom cron format</option></select>";
+		kind.querySelector("select").value = draft.scheduleKind;
+		body.appendChild(kind);
+		body.appendChild(this.input("Cron format", draft.schedule, "schedule"));
+		const enabled = document.createElement("label");
+		enabled.className = "nav-backup-checkbox";
+		enabled.innerHTML = `<input type="checkbox" name="enabled" ${draft.enabled ? "checked" : ""}> Run automatically`;
+		body.appendChild(enabled);
+	}
+
+	async render_snapshots(body, draft) {
+		const source = await this.nav_window_ref.zfs_snapshot_manager.detect(draft.source).catch(() => ({ supported: false }));
+		const destination = draft.mode === "rsync"
+			? await this.nav_window_ref.zfs_snapshot_manager.detect(draft.destination).catch(() => ({ supported: false }))
+			: { supported: false };
+		if (draft.mode === "snapshot" && !source.supported) body.appendChild(document.createTextNode("The selected source is not on ZFS. Choose a ZFS source before saving."));
+		for (const [name, label, info, forced] of [
+			["snapshotSource", "Snapshot source", source, draft.mode === "snapshot"],
+			["snapshotDestination", "Snapshot destination", destination, false],
+		]) {
+			const field = document.createElement("label");
+			field.className = "nav-backup-checkbox";
+			field.innerHTML = `<input type="checkbox" name="${name}" ${draft[name] || forced ? "checked" : ""} ${info.supported ? "" : "disabled"}> ${label}${info.supported ? ` (${this.escape(info.dataset)})` : " (not on ZFS)"}`;
+			body.appendChild(field);
+		}
+		const retention = document.createElement("label");
+		retention.className = "nav-backup-field";
+		retention.innerHTML = `Keep latest snapshots (0 keeps all)<input type="number" min="0" step="1" name="snapshotRetention" value="${draft.snapshotRetention}">`;
+		body.appendChild(retention);
+	}
+
+	async render_summary(body, draft) {
+		const type = draft.mode === "snapshot" ? "ZFS snapshot" : "rsync copy";
+		body.innerHTML += `<h3>Summary</h3><dl class="nav-backup-summary"><dt>Type</dt><dd>${type}</dd><dt>Source</dt><dd>${this.escape(draft.source)}</dd>${draft.mode === "rsync" ? `<dt>Destination</dt><dd>${this.escape(draft.destination)}</dd>` : ""}<dt>Schedule</dt><dd>${draft.enabled ? this.escape(draft.schedule) : "Paused"}</dd><dt>Snapshot retention</dt><dd>${draft.snapshotRetention || "Unlimited"}</dd></dl>`;
+		if (!draft.lastRun) return;
+		const run = draft.lastRun;
+		body.innerHTML += `<h3>Latest execution</h3><dl class="nav-backup-summary"><dt>Status</dt><dd>${this.escape(run.status)}</dd><dt>Started</dt><dd>${this.escape(new Date(run.at).toLocaleString())}</dd><dt>Duration</dt><dd>${run.durationSeconds ?? "-"} seconds</dd><dt>Files</dt><dd>${this.escape(run.metrics?.files || "-")}</dd><dt>Transferred</dt><dd>${this.escape(run.metrics?.transferred || "-")}</dd><dt>Snapshots kept</dt><dd>${run.metrics?.snapshots ?? "-"}</dd></dl>`;
+		const logs = await this.run("logs", draft.id).catch(() => ({ lines: [] }));
+		const log = document.createElement("pre");
+		log.className = "nav-backup-log";
+		log.textContent = logs.lines.join("\n") || "No log entries yet.";
+		body.appendChild(log);
+	}
+
+	read_step(body, draft, step) {
+		const get = name => body.querySelector(`[name="${name}"]`);
+		if (step === 0) {
+			draft.name = get("name").value.trim();
+			draft.source = get("source").value.trim();
+			draft.mode = get("mode").value;
+			draft.destination = draft.mode === "rsync" ? get("destination")?.value.trim() : null;
+			if (!draft.name || !draft.source.startsWith("/") || (draft.mode === "rsync" && (!draft.destination?.startsWith("/") || draft.source === draft.destination))) {
+				this.nav_window_ref.modal_prompt.alert("Invalid paths", "Enter a name and different absolute paths.");
+				return false;
+			}
+		} else if (step === 1) {
+			draft.scheduleKind = get("scheduleKind").value;
+			const presets = { "every-2": "0 */2 * * *", "every-6": "0 */6 * * *", daily: "0 2 * * *" };
+			draft.schedule = presets[draft.scheduleKind] || get("schedule").value.trim();
+			draft.enabled = get("enabled").checked;
+			if (draft.enabled && !/^[0-9*/,-]+\s+[0-9*/,-]+\s+[0-9*/,-]+\s+[0-9*/,-]+\s+[0-9*/,-]+$/.test(draft.schedule)) {
+				this.nav_window_ref.modal_prompt.alert("Invalid schedule", "Enter a five-field cron expression.");
+				return false;
+			}
+		} else if (step === 2) {
+			draft.snapshotSource = get("snapshotSource").checked;
+			draft.snapshotDestination = get("snapshotDestination").checked;
+			draft.snapshotRetention = Math.max(0, Number.parseInt(get("snapshotRetention").value, 10) || 0);
+		}
+		return true;
+	}
+
+	async save(draft, original) {
+		if (draft.mode === "snapshot" && !draft.snapshotSource) {
+			await this.nav_window_ref.modal_prompt.alert("Snapshot unavailable", "The source must be on ZFS for a snapshot-only job.");
+			return;
+		}
+		const jobs = await this.jobs();
+		const index = jobs.findIndex(job => job.id === draft.id);
+		if (index === -1) jobs.push(draft);
+		else jobs[index] = draft;
 		await this.config_store.save();
 		try {
 			await this.sync_cron();
-			await this.nav_window_ref.modal_prompt.alert("Backup saved", "The destination will be created automatically when this backup runs.");
+			await this.show();
 		} catch (error) {
-			await this.nav_window_ref.modal_prompt.alert("Could not schedule backup", error.message || String(error));
-		}
-	}
-
-	async manage(job) {
-		const description = job.mode === "snapshot" ? `Snapshot of ${job.source}` : `${job.source} to ${job.destination}`;
-		const action = await this.nav_window_ref.modal_prompt.choose("Backup: " + job.name, description, [
-			{ label: "Run now", value: "run", primary: true },
-			{ label: job.enabled ? "Pause schedule" : "Enable schedule", value: "toggle" },
-			{ label: "Remove backup", value: "remove", danger: true },
-		]);
-		if (action === "run") {
-			this.nav_window_ref.start_load();
-			try {
-				const result = await this.run("run", job.id);
-				const completed = job.mode === "snapshot" ? `Created a snapshot for ${job.source}.` : `Copied ${job.source} to ${job.destination}.`;
-				await this.nav_window_ref.modal_prompt.alert("Backup complete", result.skipped ? result.message : completed);
-			} catch (error) {
-				await this.nav_window_ref.modal_prompt.alert("Backup failed", error.message || String(error));
-			} finally {
-				this.nav_window_ref.stop_load();
-			}
-		} else if (action === "toggle") {
-			job.enabled = !job.enabled;
-			await this.config_store.save();
-			await this.sync_cron();
-		} else if (action === "remove") {
-			const jobs = await this.jobs();
-			const backups = await this.config_store.section("backups", { jobs: [] });
-			backups.jobs = jobs.filter(item => item.id !== job.id);
-			await this.config_store.save();
-			await this.sync_cron();
+			await this.nav_window_ref.modal_prompt.alert("Could not save schedule", error.message || String(error));
 		}
 	}
 }

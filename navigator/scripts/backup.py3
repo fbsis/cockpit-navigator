@@ -108,6 +108,43 @@ def zfs_dataset(path):
     return filesystem.get("source") if filesystem.get("fstype") == "zfs" else None
 
 
+def log_path(job_id):
+    directory = Path(os.environ.get("XDG_CACHE_HOME", "~/.cache")).expanduser() / "cockpit-navigator" / "backups"
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    return directory / f"{job_id}.log"
+
+
+def write_log(job_id, message):
+    with log_path(job_id).open("a", encoding="utf-8") as log_file:
+        log_file.write(f"{datetime.datetime.now().astimezone().isoformat(timespec='seconds')} {message}\n")
+
+
+def snapshot_metrics(dataset, job_id, retention):
+    prefix = f"{dataset}@navigator-{job_id}-"
+    output = subprocess.run(
+        ["zfs", "list", "-H", "-t", "snapshot", "-o", "name", "-s", "creation", "-r", dataset],
+        check=True, text=True, capture_output=True,
+    ).stdout
+    snapshots = [name for name in output.splitlines() if name.startswith(prefix)]
+    removed = 0
+    if retention > 0:
+        for snapshot in snapshots[:-retention]:
+            subprocess.run(["zfs", "destroy", snapshot], check=True, capture_output=True)
+            removed += 1
+        snapshots = snapshots[-retention:]
+    return {"kept": len(snapshots), "removed": removed}
+
+
+def rsync_metrics(output):
+    metrics = {}
+    for line in output.splitlines():
+        if line.startswith("Number of files:"):
+            metrics["files"] = line.split(":", 1)[1].strip()
+        elif line.startswith("Total transferred file size:"):
+            metrics["transferred"] = line.split(":", 1)[1].strip()
+    return metrics
+
+
 def run_job(job_id):
     config = load_config()
     job = next((item for item in jobs_from(config) if item.get("id") == job_id), None)
@@ -132,6 +169,7 @@ def run_job(job_id):
 
         started = datetime.datetime.now(datetime.timezone.utc)
         try:
+            write_log(job_id, f"Started {job.get('mode', 'rsync')} job.")
             stamp = started.strftime("%Y%m%d-%H%M%S")
             snapshot_datasets = set()
             snapshot_paths = [(source, job.get("snapshotSource") or job.get("mode") == "snapshot")]
@@ -146,16 +184,33 @@ def run_job(job_id):
                     snapshot_datasets.add(dataset)
             for dataset in snapshot_datasets:
                 subprocess.run(["zfs", "snapshot", f"{dataset}@navigator-{job_id}-{stamp}"], check=True, capture_output=True)
+                write_log(job_id, f"Created snapshot {dataset}@navigator-{job_id}-{stamp}.")
+            snapshots = {"kept": 0, "removed": 0}
+            retention = max(0, int(job.get("snapshotRetention", 0) or 0))
+            for dataset in snapshot_datasets:
+                result = snapshot_metrics(dataset, job_id, retention)
+                snapshots["kept"] += result["kept"]
+                snapshots["removed"] += result["removed"]
             if destination:
-                subprocess.run(
-                    ["rsync", "-aHAX", "--numeric-ids", source.rstrip("/") + "/", destination.rstrip("/") + "/"],
+                rsync = subprocess.run(
+                    ["rsync", "-aHAX", "--numeric-ids", "--stats", source.rstrip("/") + "/", destination.rstrip("/") + "/"],
                     check=True, capture_output=True,
                 )
-            job["lastRun"] = {"status": "success", "at": started.isoformat()}
+                metrics = rsync_metrics(rsync.stdout.decode())
+            else:
+                metrics = {}
+            finished = datetime.datetime.now(datetime.timezone.utc)
+            job["lastRun"] = {
+                "status": "success", "at": started.isoformat(),
+                "durationSeconds": round((finished - started).total_seconds()),
+                "metrics": {**metrics, "snapshots": snapshots["kept"], "snapshotsRemoved": snapshots["removed"]},
+            }
+            write_log(job_id, "Completed successfully.")
             save_config(config)
             return {"source": source, "destination": destination, "mode": job.get("mode", "rsync")}
         except Exception as error:
             job["lastRun"] = {"status": "error", "at": started.isoformat(), "error": str(error)}
+            write_log(job_id, f"Failed: {error}")
             save_config(config)
             raise
 
@@ -164,11 +219,20 @@ def main():
     parser = argparse.ArgumentParser()
     command = parser.add_subparsers(dest="action", required=True)
     command.add_parser("sync-cron")
+    logs = command.add_parser("logs")
+    logs.add_argument("job_id")
     run = command.add_parser("run")
     run.add_argument("job_id")
     arguments = parser.parse_args()
     try:
-        result = sync_cron() if arguments.action == "sync-cron" else run_job(arguments.job_id)
+        if arguments.action == "sync-cron":
+            result = sync_cron()
+        elif arguments.action == "logs":
+            path = log_path(arguments.job_id)
+            lines = path.read_text(encoding="utf-8").splitlines()[-50:] if path.exists() else []
+            result = {"lines": lines}
+        else:
+            result = run_job(arguments.job_id)
         print(json.dumps({"ok": True, **result}))
         return 0
     except Exception as error:
