@@ -34,7 +34,7 @@ export class NavigatorConfig {
 			[this.script, "write"],
 			{ err: "out" }
 		);
-		process.input(JSON.stringify(this.config, null, 2), true);
+		process.input(JSON.stringify(this.config, null, 2));
 		await process;
 	}
 

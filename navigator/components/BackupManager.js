@@ -35,6 +35,20 @@ export class BackupManager {
 		await this.run("sync-cron");
 	}
 
+	async wait_for(operation, description) {
+		let timeout;
+		try {
+			return await Promise.race([
+				operation,
+				new Promise((_, reject) => {
+					timeout = window.setTimeout(() => reject(new Error(`${description} timed out after 15 seconds.`)), 15000);
+				}),
+			]);
+		} finally {
+			window.clearTimeout(timeout);
+		}
+	}
+
 	open_modal(title) {
 		const modal = this.nav_window_ref.modal_prompt;
 		modal.set_header(title);
@@ -285,13 +299,13 @@ export class BackupManager {
 			const index = jobs.findIndex(job => job.id === draft.id);
 			if (index === -1) jobs.push(draft);
 			else jobs[index] = draft;
-			await this.config_store.save();
+			await this.wait_for(this.config_store.save(), "Saving Navigator settings");
 		} catch (error) {
 			await this.show(`Could not save schedule: ${error.message || String(error)}`, true);
 			return;
 		}
 		try {
-			await this.sync_cron();
+			await this.wait_for(this.sync_cron(), "Updating crontab");
 			this.nav_window_ref.modal_prompt.hide();
 		} catch (error) {
 			await this.show(`Schedule saved, but cron was not updated: ${error.message || String(error)}`, true);
