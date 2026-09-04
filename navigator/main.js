@@ -135,7 +135,6 @@ function set_up_buttons() {
 	document.getElementById("nav-clipboard-btn").addEventListener("click", () => nav_window.transfer_manager.enqueue_from_clipboard());
 	document.getElementById("nav-mkdir-btn").addEventListener("click", nav_window.mkdir.bind(nav_window));
 	document.getElementById("nav-touch-btn").addEventListener("click", nav_window.touch.bind(nav_window));
-	document.getElementById("nav-ln-btn").addEventListener("click", nav_window.ln.bind(nav_window, ""));
 	document.getElementById("nav-delete-btn").addEventListener("click", nav_window.delete_selected.bind(nav_window));
 	document.getElementById("nav-edit-properties-btn").addEventListener("click", nav_window.show_edit_selected.bind(nav_window));
 	document.getElementById("nav-cancel-edit-btn").addEventListener("click", nav_window.hide_edit_selected.bind(nav_window));
