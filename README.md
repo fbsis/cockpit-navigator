@@ -35,6 +35,7 @@ I created and maintain the following improvements in this fork. My goal is to tr
 * **Thumbnail gallery mode** with ImageMagick thumbnails for images and FFmpeg thumbnails for videos, cached under the system temporary directory with a graceful icon fallback.
 * **Video preview** using the browser's native controls, limited to the first 200 MB for large files.
 * **ZFS snapshot history and restore** for individual files and folders, with cached filesystem detection, safe merge restoration, and automatic preservation of replaced content.
+* **Scheduled backups** using rsync without destination deletion, optional ZFS snapshots, open-tab path suggestions, automatic destination creation, and per-user cron jobs.
 
 | Browsing Filesystem |
 |---------------------|

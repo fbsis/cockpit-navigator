@@ -313,7 +313,21 @@ export class ModalPrompt {
 				req.type = request.type;
 			req.style.flexBasis = "0";
 			if (request.hasOwnProperty("default")) {
-				req.value = request.default;
+				if (req instanceof HTMLInputElement && request.type === "checkbox")
+					req.checked = request.default;
+				else
+					req.value = request.default;
+			}
+			if (request.options?.length && req instanceof HTMLInputElement) {
+				const datalist = document.createElement("datalist");
+				datalist.id = `${key}-options`;
+				for (const option of request.options) {
+					const item = document.createElement("option");
+					item.value = option;
+					datalist.appendChild(item);
+				}
+				req.setAttribute("list", datalist.id);
+				this.body.appendChild(datalist);
 			}
 			if (request.type === "select") {
 				for (const option of request.options || []) {

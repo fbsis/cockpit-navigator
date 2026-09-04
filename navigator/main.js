@@ -22,6 +22,7 @@ import { NavWindow } from "./components/NavWindow.js";
 import { BookmarkMenu } from "./components/BookmarkMenu.js";
 import { TabManager } from "./components/TabManager.js";
 import { NavigatorConfig } from "./components/NavigatorConfig.js";
+import { BackupManager } from "./components/BackupManager.js";
 import { NAVIGATOR_VERSION } from "./version.js";
 
 /**
@@ -130,6 +131,7 @@ function set_up_buttons() {
 	document.getElementById("nav-up-dir-btn").addEventListener("click", nav_window.up.bind(nav_window));
 	document.getElementById("nav-refresh-btn").addEventListener("click", nav_window.refresh.bind(nav_window));
 	document.getElementById("nav-terminal-btn").addEventListener("click", () => nav_window.open_terminal());
+	document.getElementById("nav-backup-btn").addEventListener("click", () => nav_window.backup_manager.show().catch(error => nav_window.modal_prompt.alert("Could not manage backups", error.message || String(error))));
 	document.getElementById("nav-clipboard-btn").addEventListener("click", () => nav_window.transfer_manager.enqueue_from_clipboard());
 	document.getElementById("nav-mkdir-btn").addEventListener("click", nav_window.mkdir.bind(nav_window));
 	document.getElementById("nav-touch-btn").addEventListener("click", nav_window.touch.bind(nav_window));
@@ -182,6 +184,7 @@ async function main() {
 		await nav_window.modal_prompt.alert("Could not load Navigator settings.", error.message || String(error));
 	}
 	bookmark_menu = new BookmarkMenu(nav_window, config_store);
+	nav_window.backup_manager = new BackupManager(nav_window, config_store);
 	await set_up_technical_columns(config_store);
 	tab_manager = new TabManager(nav_window, config_store);
 	await tab_manager.ready;
