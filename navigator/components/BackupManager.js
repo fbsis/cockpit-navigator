@@ -25,7 +25,7 @@ export class BackupManager {
 	}
 
 	async run(action, ...arguments_) {
-		const output = await cockpit.spawn([this.script, action, ...arguments_], { superuser: "require", err: "out" });
+		const output = await cockpit.spawn([this.script, action, ...arguments_], { superuser: "try", err: "out" });
 		const result = JSON.parse(output);
 		if (!result.ok) throw new Error(result.error || "Backup operation failed.");
 		return result;
